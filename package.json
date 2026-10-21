@@ -1,0 +1,17 @@
+{
+  "name": "managementsystem",
+  "version": "1.0.0",
+  "description": "> Enterprise Multi-Godown Material Management & Stock Movement Platform for Tiles, Marble, Granite, and Sanitary Ware.",
+  "main": "index.js",
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:frontend": "npm --prefix frontend run build",
+    "lint:frontend": "npm --prefix frontend run lint",
+    "start:backend": "npm --prefix backend start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}
