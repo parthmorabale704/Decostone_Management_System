@@ -101,7 +101,7 @@ export function MaterialDetailModal({
           ) : data ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               {/* Top Overview: Image + Key Metrics */}
-              <div style={{ display: 'grid', gridTemplateColumns: data.image_url ? '220px 1fr' : '1fr', gap: '20px' }}>
+              <div className="material-detail-overview" style={{ display: 'grid', gridTemplateColumns: data.image_url ? '220px 1fr' : '1fr', gap: '20px' }}>
                 {data.image_url && (
                   <div
                     style={{

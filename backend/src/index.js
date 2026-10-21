@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const dotenv = require('dotenv');
+const { startLowStockNotifications } = require('./services/notificationService');
 
 dotenv.config();
 
@@ -47,6 +48,7 @@ app.use('/api/stock', require('./routes/stockRoutes'));
 app.use('/api/reports', require('./routes/reportRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/system', require('./routes/auditRoutes'));
+app.use('/api/operations', require('./routes/operationsRoutes'));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -77,6 +79,7 @@ app.listen(PORT, () => {
   console.log(`🏛️  DecoStone MMS Server running on port ${PORT}`);
   console.log(`📍 REST API available at http://localhost:${PORT}/api`);
   console.log(`===============================================`);
+  startLowStockNotifications();
 });
 
 module.exports = app;

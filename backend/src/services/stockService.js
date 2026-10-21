@@ -28,6 +28,26 @@ function ensureStockRecord(godownId, materialId) {
   return existing;
 }
 
+// Keep tracked batches in sync when they exist; legacy/opening stock remains unallocated.
+function consumeTrackedLots(godownId, materialId, quantity, destinationGodownId = null) {
+  let remaining = Number(quantity);
+  const lots = db.prepare(`SELECT * FROM stock_lots WHERE godown_id=? AND material_id=? AND quantity>0
+    ORDER BY CASE WHEN expiry_date IS NULL THEN 1 ELSE 0 END, expiry_date ASC, created_at ASC, id ASC`).all(godownId, materialId);
+  for (const lot of lots) {
+    if (remaining <= 0) break;
+    const moved = Math.min(remaining, Number(lot.quantity));
+    db.prepare('UPDATE stock_lots SET quantity=quantity-? WHERE id=?').run(moved, lot.id);
+    if (destinationGodownId) {
+      db.prepare(`INSERT INTO stock_lots(material_id,godown_id,lot_code,shade_code,caliber,expiry_date,quantity)
+        VALUES(?,?,?,?,?,?,?) ON CONFLICT(material_id,godown_id,lot_code) DO UPDATE SET quantity=stock_lots.quantity+excluded.quantity,
+        shade_code=COALESCE(excluded.shade_code,stock_lots.shade_code),caliber=COALESCE(excluded.caliber,stock_lots.caliber),
+        expiry_date=COALESCE(excluded.expiry_date,stock_lots.expiry_date)`)
+        .run(materialId,destinationGodownId,lot.lot_code,lot.shade_code,lot.caliber,lot.expiry_date,moved);
+    }
+    remaining -= moved;
+  }
+}
+
 // 1. Stock IN
 function stockIn({ godownId, materialId, quantity, supplier, referenceNo, remarks, user, req }) {
   const qty = Number(quantity);
@@ -105,6 +125,7 @@ function stockOut({ godownId, materialId, quantity, customer, referenceNo, remar
 
     db.prepare('UPDATE stock SET quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE godown_id = ? AND material_id = ?')
       .run(newStock, godownId, materialId);
+    consumeTrackedLots(godownId, materialId, qty);
 
     const txnId = generateTransactionId('TXN-OUT');
     db.prepare(`
@@ -174,6 +195,7 @@ function transferStock({ fromGodownId, toGodownId, materialId, quantity, reason,
 
     db.prepare('UPDATE stock SET quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE godown_id = ? AND material_id = ?')
       .run(toNew, toGodownId, materialId);
+    consumeTrackedLots(fromGodownId, materialId, qty, toGodownId);
 
     const transferId = generateTransferId();
 
@@ -244,6 +266,7 @@ function adjustStock({ godownId, materialId, physicalStock, reason, user, req })
 
     db.prepare('UPDATE stock SET quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE godown_id = ? AND material_id = ?')
       .run(targetQty, godownId, materialId);
+    if (adjustmentQty < 0) consumeTrackedLots(godownId, materialId, Math.abs(adjustmentQty));
 
     db.prepare(`
       INSERT INTO stock_adjustments (godown_id, material_id, system_stock, physical_stock, adjustment_quantity, reason, user_id)
@@ -284,5 +307,6 @@ module.exports = {
   stockOut,
   transferStock,
   adjustStock,
-  ensureStockRecord
+  ensureStockRecord,
+  consumeTrackedLots
 };

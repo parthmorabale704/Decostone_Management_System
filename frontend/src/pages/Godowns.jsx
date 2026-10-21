@@ -367,8 +367,9 @@ export function Godowns({ godownId = null, onOpenTransactionModal, onSelectMater
                   filteredInventory.map((item) => (
                     <tr key={item.material_id}>
                       <td style={{ fontWeight: 600 }}>
-                        <div
-                          style={{ cursor: 'pointer', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}
+                        <button
+                          type="button"
+                          className="table-link material-row-link"
                           onClick={() => onSelectMaterial && onSelectMaterial(item.material_id)}
                         >
                           {item.image_url && (
@@ -379,7 +380,7 @@ export function Godowns({ godownId = null, onOpenTransactionModal, onSelectMater
                             />
                           )}
                           <span>{item.material_name}</span>
-                        </div>
+                        </button>
                         {item.brand && (
                           <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', display: 'block' }}>
                             {item.brand} {item.size ? `• ${item.size}` : ''}

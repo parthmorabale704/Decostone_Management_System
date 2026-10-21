@@ -14,6 +14,7 @@ export function MaterialModal({
   const { success, error } = useNotification();
   const [formData, setFormData] = useState({
     sku: '',
+    barcode: '',
     name: '',
     category_id: '',
     brand: '',
@@ -33,6 +34,7 @@ export function MaterialModal({
     if (material) {
       setFormData({
         sku: material.sku || '',
+        barcode: material.barcode || '',
         name: material.name || '',
         category_id: material.category_id || '',
         brand: material.brand || '',
@@ -54,6 +56,7 @@ export function MaterialModal({
 
       setFormData({
         sku: '',
+        barcode: '',
         name: '',
         category_id: categories.length > 0 ? categories[0].id : '',
         brand: 'DecoStone',
@@ -151,6 +154,12 @@ export function MaterialModal({
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
                 />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Barcode (optional)</label>
+                <input type="text" className="form-control" placeholder="Scan or enter barcode" value={formData.barcode}
+                  onChange={(e) => setFormData({ ...formData, barcode: e.target.value.trim() })} />
               </div>
 
               <div className="form-group" style={{ marginBottom: 0 }}>

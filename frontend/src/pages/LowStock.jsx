@@ -197,12 +197,13 @@ export function LowStock({ onOpenTransactionModal, onSelectMaterial }) {
                         </div>
                       </td>
                       <td style={{ fontWeight: 600 }}>
-                        <div
-                          style={{ cursor: 'pointer', color: 'var(--primary)' }}
+                        <button
+                          type="button"
+                          className="table-link"
                           onClick={() => onSelectMaterial && onSelectMaterial(item.material_id)}
                         >
                           {item.material_name}
-                        </div>
+                        </button>
                         <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{item.sku}</span>
                       </td>
                       <td>{item.category_name}</td>

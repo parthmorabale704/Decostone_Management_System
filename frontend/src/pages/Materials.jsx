@@ -332,12 +332,13 @@ export function Materials({
                         </div>
                       )}
                       <div>
-                        <div
-                          style={{ fontWeight: 700, cursor: 'pointer', color: 'var(--primary)' }}
+                        <button
+                          type="button"
+                          className="table-link"
                           onClick={() => onSelectMaterial && onSelectMaterial(m.id)}
                         >
                           {m.name}
-                        </div>
+                        </button>
                         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '2px' }}>
                           <span className="badge badge-info" style={{ fontSize: '0.68rem' }}>{m.sku}</span>
                           {m.brand && <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{m.brand}</span>}
@@ -490,11 +491,10 @@ export function Materials({
               <div style={{ padding: '16px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                 <div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase' }}>{m.category_name}</div>
-                  <h3
-                    style={{ fontSize: '1.1rem', fontWeight: 800, marginTop: '2px', cursor: 'pointer', color: 'var(--primary)' }}
-                    onClick={() => onSelectMaterial && onSelectMaterial(m.id)}
-                  >
-                    {m.name}
+                  <h3 className="material-card-title">
+                    <button type="button" className="table-link" onClick={() => onSelectMaterial && onSelectMaterial(m.id)}>
+                      {m.name}
+                    </button>
                   </h3>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
                     {m.brand} • {m.size || 'Standard'}

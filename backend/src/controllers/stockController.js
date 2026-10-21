@@ -167,12 +167,14 @@ function getTransactions(req, res) {
       params.push(term, term, term, term, term);
     }
 
+    const countQuery = query.replace(/SELECT[\s\S]*?FROM stock_transactions st/, 'SELECT COUNT(*) AS total FROM stock_transactions st');
+    const total = db.prepare(countQuery).get(...params).total;
     query += ` ORDER BY st.created_at DESC, st.id DESC LIMIT ? OFFSET ?`;
     params.push(safeLimit, safeOffset);
 
     const transactions = db.prepare(query).all(...params);
 
-    res.json({ success: true, transactions, count: transactions.length });
+    res.json({ success: true, transactions, count: transactions.length, total, hasMore: safeOffset + transactions.length < total });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -185,6 +187,9 @@ function getTransfers(req, res) {
     const safeLimit = Number.isInteger(limitValue) ? Math.min(500, Math.max(1, limitValue)) : 50;
     const safeOffset = Number.isInteger(offsetValue) ? Math.max(0, offsetValue) : 0;
 
+    const filters = `FROM stock_transfers t WHERE (? = 1 OR t.from_godown_id = ? OR t.to_godown_id = ?)`;
+    const args = [req.user.role === 'admin' || req.user.role === 'manager' ? 1 : 0, req.user.assigned_godown_id || -1, req.user.assigned_godown_id || -1];
+    const total = db.prepare(`SELECT COUNT(*) total ${filters}`).get(...args).total;
     const transfers = db.prepare(`
       SELECT t.*,
              fg.name as from_godown_name,
@@ -203,7 +208,7 @@ function getTransfers(req, res) {
       LIMIT ? OFFSET ?
     `).all(req.user.role === 'admin' || req.user.role === 'manager' ? 1 : 0, req.user.assigned_godown_id || -1, req.user.assigned_godown_id || -1, safeLimit, safeOffset);
 
-    res.json({ success: true, transfers });
+    res.json({ success: true, transfers, total, hasMore: safeOffset + transfers.length < total });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -211,6 +216,12 @@ function getTransfers(req, res) {
 
 function getAdjustments(req, res) {
   try {
+    const limitValue = Number(req.query.limit ?? 100);
+    const offsetValue = Number(req.query.offset ?? 0);
+    const safeLimit = Number.isInteger(limitValue) ? Math.min(500, Math.max(1, limitValue)) : 100;
+    const safeOffset = Number.isInteger(offsetValue) ? Math.max(0, offsetValue) : 0;
+    const scope = [req.user.role === 'admin' || req.user.role === 'manager' ? 1 : 0, req.user.assigned_godown_id || -1];
+    const total = db.prepare('SELECT COUNT(*) total FROM stock_adjustments a WHERE (?=1 OR a.godown_id=?)').get(...scope).total;
     const adjustments = db.prepare(`
       SELECT a.*,
              g.name as godown_name,
@@ -224,10 +235,10 @@ function getAdjustments(req, res) {
       JOIN users u ON a.user_id = u.id
       WHERE (? = 1 OR a.godown_id = ?)
       ORDER BY a.created_at DESC
-      LIMIT 100
-    `).all(req.user.role === 'admin' || req.user.role === 'manager' ? 1 : 0, req.user.assigned_godown_id || -1);
+      LIMIT ? OFFSET ?
+    `).all(...scope, safeLimit, safeOffset);
 
-    res.json({ success: true, adjustments });
+    res.json({ success: true, adjustments, total, hasMore: safeOffset + adjustments.length < total });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

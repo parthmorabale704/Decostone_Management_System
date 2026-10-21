@@ -8,13 +8,17 @@ export function Transfers({ onOpenTransactionModal, onSelectMaterial }) {
   const { user } = useAuth();
   const [transfers, setTransfers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [offset, setOffset] = useState(0);
+  const [total, setTotal] = useState(0);
+  const pageSize = 50;
 
   const loadTransfers = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res = await api.getTransfers();
+      const res = await api.getTransfers({ limit: pageSize, offset });
       if (res.success) {
         setTransfers(res.transfers || []);
+        setTotal(res.total || 0);
       }
     } catch (err) {
       console.error('Failed to load transfers:', err);
@@ -25,7 +29,7 @@ export function Transfers({ onOpenTransactionModal, onSelectMaterial }) {
 
   useEffect(() => {
     loadTransfers();
-  }, []);
+  }, [offset]);
 
   useStockSync(() => {
     loadTransfers(true);
@@ -130,12 +134,13 @@ export function Transfers({ onOpenTransactionModal, onSelectMaterial }) {
                       {t.to_godown_name}
                     </td>
                     <td style={{ fontWeight: 600 }}>
-                      <div
-                        style={{ cursor: 'pointer', color: 'var(--primary)' }}
+                      <button
+                        type="button"
+                        className="table-link"
                         onClick={() => onSelectMaterial && onSelectMaterial(t.material_id)}
                       >
                         {t.material_name}
-                      </div>
+                      </button>
                       <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{t.material_sku}</span>
                     </td>
                     <td style={{ fontSize: '1.05rem', fontWeight: 800 }}>
@@ -155,6 +160,7 @@ export function Transfers({ onOpenTransactionModal, onSelectMaterial }) {
           </table>
         </div>
       )}
+      <div className="pagination-controls"><span>Showing {total ? offset + 1 : 0}–{Math.min(offset + transfers.length, total)} of {total} transfers</span><div><button className="btn btn-secondary btn-sm" disabled={offset === 0 || loading} onClick={() => setOffset(Math.max(0, offset - pageSize))}>Previous</button><button className="btn btn-secondary btn-sm" disabled={offset + pageSize >= total || loading} onClick={() => setOffset(offset + pageSize)}>Next</button></div></div>
     </div>
   );
 }

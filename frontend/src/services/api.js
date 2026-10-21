@@ -75,7 +75,7 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return request(`/stock/transfers?${query}`);
   },
-  getAdjustments: () => request('/stock/adjustments'),
+  getAdjustments: (params = {}) => request(`/stock/adjustments?${new URLSearchParams(params)}`),
   getLowStock: () => request('/stock/low-stock'),
 
   // Reports & Analytics
@@ -101,5 +101,20 @@ export const api = {
     return request(`/system/logs?${query}`);
   },
   getSettings: () => request('/system/settings'),
-  updateSettings: (settings) => request('/system/settings', { method: 'PUT', body: JSON.stringify({ settings }) })
+  updateSettings: (settings) => request('/system/settings', { method: 'PUT', body: JSON.stringify({ settings }) }),
+  getSuppliers: () => request('/operations/suppliers'),
+  createSupplier: (data) => request('/operations/suppliers', { method: 'POST', body: JSON.stringify(data) }),
+  getCustomers: () => request('/operations/customers'),
+  createCustomer: (data) => request('/operations/customers', { method: 'POST', body: JSON.stringify(data) }),
+  getOrders: (params = {}) => request(`/operations/orders?${new URLSearchParams(params)}`),
+  createOrder: (data) => request('/operations/orders', { method: 'POST', body: JSON.stringify(data) }),
+  getOrder: (id) => request(`/operations/orders/${id}`),
+  orderAction: (id, action) => request(`/operations/orders/${id}/${action}`, { method: 'POST' }),
+  getCounts: () => request('/operations/counts'),
+  getLots: (params = {}) => request(`/operations/lots?${new URLSearchParams(params)}`),
+  createCount: (data) => request('/operations/counts', { method: 'POST', body: JSON.stringify(data) }),
+  getCount: (id) => request(`/operations/counts/${id}`),
+  updateCountLine: (sessionId, lineId, counted_quantity) => request(`/operations/counts/${sessionId}/lines/${lineId}`, { method: 'PUT', body: JSON.stringify({ counted_quantity }) }),
+  submitCount: (id) => request(`/operations/counts/${id}/submit`, { method: 'POST' }),
+  reviewCount: (id, action) => request(`/operations/counts/${id}/${action}`, { method: 'POST' })
 };

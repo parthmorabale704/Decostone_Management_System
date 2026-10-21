@@ -329,12 +329,13 @@ export function Dashboard({ onOpenTransactionModal, onSelectMaterial, onSelectPa
                   data?.lowStockMaterials?.map((m) => (
                     <tr key={m.id}>
                       <td style={{ fontWeight: 600 }}>
-                        <div
-                          style={{ cursor: 'pointer', color: 'var(--primary)' }}
+                        <button
+                          type="button"
+                          className="table-link"
                           onClick={() => onSelectMaterial && onSelectMaterial(m.id)}
                         >
                           {m.name}
-                        </div>
+                        </button>
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{m.sku}</div>
                       </td>
                       <td>{m.category_name}</td>

@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useState, useEffect } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './context/AuthContext';
 import { api } from './services/api';
 import { useStockSync } from './hooks/useStockSync';
@@ -23,6 +23,7 @@ const Reports = lazy(() => import('./pages/Reports').then(module => ({ default: 
 const Users = lazy(() => import('./pages/Users').then(module => ({ default: module.Users })));
 const AuditLogs = lazy(() => import('./pages/AuditLogs').then(module => ({ default: module.AuditLogs })));
 const Settings = lazy(() => import('./pages/Settings').then(module => ({ default: module.Settings })));
+const Operations = lazy(() => import('./pages/Operations').then(module => ({ default: module.Operations })));
 
 export function App() {
   const { user, token, loading } = useAuth();
@@ -31,6 +32,7 @@ export function App() {
   const [activePage, setActivePage] = useState('dashboard');
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
   // Global Data
   const [godowns, setGodowns] = useState([]);
@@ -86,6 +88,12 @@ export function App() {
     setActivePage('materials');
   };
 
+  const handleSelectPage = (page) => {
+    setActivePage(page);
+    if (page !== 'materials') setSelectedCategoryId(null);
+    setSidebarOpen(false);
+  };
+
   if (loading) {
     return (
       <div
@@ -119,12 +127,8 @@ export function App() {
       <Sidebar
         activePage={activePage}
         isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        onSelectPage={(page) => {
-          setActivePage(page);
-          if (page !== 'materials') setSelectedCategoryId(null);
-          setSidebarOpen(false);
-        }}
+        onClose={closeSidebar}
+        onSelectPage={handleSelectPage}
         godowns={godowns}
       />
 
@@ -133,7 +137,7 @@ export function App() {
         <Navbar
           onMenuClick={() => setSidebarOpen(true)}
           onOpenTransactionModal={handleOpenTransactionModal}
-          onSelectPage={setActivePage}
+          onSelectPage={handleSelectPage}
         />
 
         <main style={{ flex: 1 }}>
@@ -212,6 +216,7 @@ export function App() {
           {activePage === 'audit-logs' && <AuditLogs />}
 
           {activePage === 'settings' && <Settings />}
+          {activePage === 'operations' && <Operations />}
           </Suspense>
         </main>
       </div>

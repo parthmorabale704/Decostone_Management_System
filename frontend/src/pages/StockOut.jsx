@@ -126,12 +126,13 @@ export function StockOut({ onOpenTransactionModal, onSelectMaterial }) {
                       {new Date(tx.created_at).toLocaleString()}
                     </td>
                     <td style={{ fontWeight: 600 }}>
-                      <div
-                        style={{ cursor: 'pointer', color: 'var(--primary)' }}
+                      <button
+                        type="button"
+                        className="table-link"
                         onClick={() => onSelectMaterial && onSelectMaterial(tx.material_id)}
                       >
                         {tx.material_name}
-                      </div>
+                      </button>
                       <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{tx.material_sku}</span>
                     </td>
                     <td style={{ fontWeight: 600 }}>{tx.godown_name}</td>

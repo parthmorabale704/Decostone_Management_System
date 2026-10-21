@@ -177,6 +177,7 @@ export function TransactionModal({
           <div className="modal-body">
             {/* Transaction Type Tabs */}
             <div
+              className="transaction-type-tabs"
               style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(4, 1fr)',
@@ -187,7 +188,7 @@ export function TransactionModal({
                 borderRadius: 'var(--radius-md)'
               }}
             >
-              {user?.can_stock_in && (
+              {(user?.role === 'admin' || user?.can_stock_in) && (
                 <button
                   type="button"
                   onClick={() => setType('STOCK_IN')}
@@ -206,7 +207,7 @@ export function TransactionModal({
                 </button>
               )}
 
-              {user?.can_stock_out && (
+              {(user?.role === 'admin' || user?.can_stock_out) && (
                 <button
                   type="button"
                   onClick={() => setType('STOCK_OUT')}

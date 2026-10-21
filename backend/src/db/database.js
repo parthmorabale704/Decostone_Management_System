@@ -57,6 +57,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS materials (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sku TEXT NOT NULL UNIQUE,
+    barcode TEXT,
     name TEXT NOT NULL,
     category_id INTEGER NOT NULL REFERENCES categories(id),
     brand TEXT,
@@ -152,10 +153,85 @@ db.exec(`
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS suppliers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, contact_name TEXT,
+    email TEXT, phone TEXT, address TEXT, tax_id TEXT, notes TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS customers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, contact_name TEXT,
+    email TEXT, phone TEXT, address TEXT, tax_id TEXT, notes TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS inventory_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, order_no TEXT NOT NULL UNIQUE,
+    order_type TEXT NOT NULL CHECK (order_type IN ('PURCHASE', 'SALES')),
+    party_id INTEGER NOT NULL, godown_id INTEGER NOT NULL REFERENCES godowns(id),
+    status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','PENDING_APPROVAL','APPROVED','RECEIVED','FULFILLED','CANCELLED')),
+    notes TEXT, created_by INTEGER NOT NULL REFERENCES users(id), approved_by INTEGER REFERENCES users(id),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS inventory_order_lines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL REFERENCES inventory_orders(id) ON DELETE CASCADE,
+    material_id INTEGER NOT NULL REFERENCES materials(id), quantity REAL NOT NULL CHECK (quantity > 0),
+    unit_price REAL NOT NULL DEFAULT 0 CHECK (unit_price >= 0), lot_code TEXT, shade_code TEXT, caliber TEXT, expiry_date TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS stock_lots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, material_id INTEGER NOT NULL REFERENCES materials(id),
+    godown_id INTEGER NOT NULL REFERENCES godowns(id), lot_code TEXT NOT NULL,
+    shade_code TEXT, caliber TEXT, expiry_date TEXT, quantity REAL NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(material_id, godown_id, lot_code)
+  );
+
+  CREATE TABLE IF NOT EXISTS count_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, session_no TEXT NOT NULL UNIQUE,
+    godown_id INTEGER NOT NULL REFERENCES godowns(id), status TEXT NOT NULL DEFAULT 'DRAFT'
+      CHECK (status IN ('DRAFT','PENDING_APPROVAL','APPROVED','REJECTED')),
+    created_by INTEGER NOT NULL REFERENCES users(id), reviewed_by INTEGER REFERENCES users(id),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, reviewed_at DATETIME
+  );
+  CREATE TABLE IF NOT EXISTS count_session_lines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL REFERENCES count_sessions(id) ON DELETE CASCADE,
+    material_id INTEGER NOT NULL REFERENCES materials(id), lot_code TEXT, expected_quantity REAL NOT NULL,
+    counted_quantity REAL CHECK (counted_quantity >= 0), UNIQUE(session_id, material_id, lot_code)
+  );
+
+  CREATE TABLE IF NOT EXISTS notification_outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL, payload TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'PENDING', attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT, dedupe_key TEXT UNIQUE, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, delivered_at DATETIME
+  );
+
   CREATE INDEX IF NOT EXISTS idx_stock_transactions_created ON stock_transactions(created_at DESC, id DESC);
   CREATE INDEX IF NOT EXISTS idx_stock_transactions_godown ON stock_transactions(godown_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_stock_transactions_material ON stock_transactions(material_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_inventory_orders_type_status ON inventory_orders(order_type, status, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_stock_lots_material ON stock_lots(material_id, godown_id, lot_code);
 `);
+
+db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+  version INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+)`);
+
+function ensureColumn(table, column, definition) {
+  const columns = new Set(db.pragma(`table_info(${table})`).map(item => item.name));
+  if (!columns.has(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+// Additive migrations remain safe for databases created by earlier app versions.
+ensureColumn('materials', 'barcode', 'TEXT');
+ensureColumn('inventory_order_lines', 'shade_code', 'TEXT');
+ensureColumn('inventory_order_lines', 'caliber', 'TEXT');
+ensureColumn('notification_outbox', 'dedupe_key', 'TEXT');
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_materials_barcode ON materials(barcode) WHERE barcode IS NOT NULL AND barcode <> ''");
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_dedupe ON notification_outbox(dedupe_key) WHERE dedupe_key IS NOT NULL');
+db.prepare('INSERT OR IGNORE INTO schema_migrations(version,name) VALUES(1,?)').run('operations-and-barcode-foundation');
+db.prepare('INSERT OR IGNORE INTO schema_migrations(version,name) VALUES(2,?)').run('barcode-lot-alert-additions');
 
 module.exports = db;

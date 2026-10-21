@@ -167,6 +167,7 @@ export function Reports() {
     <div className="page-wrapper">
       {/* Header */}
       <div
+        className="report-selector-grid"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -209,7 +210,9 @@ export function Reports() {
         }}
       >
         <button
+          type="button"
           className={`card ${activeReport === 'godown-wise' ? 'border-primary' : ''}`}
+          aria-pressed={activeReport === 'godown-wise'}
           style={{
             cursor: 'pointer',
             border: activeReport === 'godown-wise' ? '2px solid var(--primary)' : '1px solid var(--border-color)',
@@ -224,7 +227,9 @@ export function Reports() {
         </button>
 
         <button
+          type="button"
           className={`card ${activeReport === 'category-wise' ? 'border-primary' : ''}`}
+          aria-pressed={activeReport === 'category-wise'}
           style={{
             cursor: 'pointer',
             border: activeReport === 'category-wise' ? '2px solid var(--primary)' : '1px solid var(--border-color)',
@@ -239,7 +244,9 @@ export function Reports() {
         </button>
 
         <button
+          type="button"
           className={`card ${activeReport === 'movement' ? 'border-primary' : ''}`}
+          aria-pressed={activeReport === 'movement'}
           style={{
             cursor: 'pointer',
             border: activeReport === 'movement' ? '2px solid var(--primary)' : '1px solid var(--border-color)',
@@ -254,7 +261,9 @@ export function Reports() {
         </button>
 
         <button
+          type="button"
           className={`card ${activeReport === 'user-activity' ? 'border-primary' : ''}`}
+          aria-pressed={activeReport === 'user-activity'}
           style={{
             cursor: 'pointer',
             border: activeReport === 'user-activity' ? '2px solid var(--primary)' : '1px solid var(--border-color)',

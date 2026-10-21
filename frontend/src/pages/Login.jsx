@@ -38,6 +38,7 @@ export function Login() {
 
   return (
     <div
+      className="login-screen"
       style={{
         minHeight: '100vh',
         width: '100%',
@@ -51,6 +52,7 @@ export function Login() {
     >
       {/* Background Decorative Glow */}
       <div
+        className="login-glow"
         style={{
           position: 'absolute',
           top: '20%',
@@ -66,7 +68,7 @@ export function Login() {
       />
 
       <div
-        className="card-glass"
+        className="card-glass login-card"
         style={{
           maxWidth: '460px',
           width: '100%',
@@ -113,7 +115,7 @@ export function Login() {
         {/* Login Form */}
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">
+            <label className="form-label" htmlFor="login-username">
               {selectedRole.toUpperCase()} Username or Email
             </label>
             <div style={{ position: 'relative' }}>
@@ -128,7 +130,9 @@ export function Login() {
                 }}
               />
               <input
+                id="login-username"
                 type="text"
+                autoComplete="username"
                 className="form-control"
                 style={{ paddingLeft: '40px' }}
                 placeholder={`Enter ${selectedRole} username`}
@@ -140,7 +144,7 @@ export function Login() {
           </div>
 
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Password</label>
+            <label className="form-label" htmlFor="login-password">Password</label>
             <div style={{ position: 'relative' }}>
               <Lock
                 size={18}
@@ -153,7 +157,9 @@ export function Login() {
                 }}
               />
               <input
+                id="login-password"
                 type="password"
+                autoComplete="current-password"
                 className="form-control"
                 style={{ paddingLeft: '40px' }}
                 placeholder="Enter password"
@@ -191,9 +197,10 @@ export function Login() {
             Select Login Role Portal
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+          <div className="login-role-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
             <button
               type="button"
+              aria-pressed={selectedRole === 'admin'}
               className={`btn btn-sm ${selectedRole === 'admin' ? 'btn-primary' : 'btn-outline'}`}
               style={{ fontSize: '0.78rem', padding: '8px 4px', fontWeight: 600 }}
               onClick={() => handleRoleTabClick('admin')}
@@ -202,6 +209,7 @@ export function Login() {
             </button>
             <button
               type="button"
+              aria-pressed={selectedRole === 'manager'}
               className={`btn btn-sm ${selectedRole === 'manager' ? 'btn-primary' : 'btn-outline'}`}
               style={{ fontSize: '0.78rem', padding: '8px 4px', fontWeight: 600 }}
               onClick={() => handleRoleTabClick('manager')}
@@ -210,6 +218,7 @@ export function Login() {
             </button>
             <button
               type="button"
+              aria-pressed={selectedRole === 'supervisor'}
               className={`btn btn-sm ${selectedRole === 'supervisor' ? 'btn-primary' : 'btn-outline'}`}
               style={{ fontSize: '0.78rem', padding: '8px 4px', fontWeight: 600 }}
               onClick={() => handleRoleTabClick('supervisor')}

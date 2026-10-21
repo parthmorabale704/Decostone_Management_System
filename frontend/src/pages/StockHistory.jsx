@@ -25,6 +25,9 @@ export function StockHistory({ onSelectMaterial }) {
   const [godownFilter, setGodownFilter] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [offset, setOffset] = useState(0);
+  const [total, setTotal] = useState(0);
+  const pageSize = 100;
 
   const loadHistory = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -36,13 +39,14 @@ export function StockHistory({ onSelectMaterial }) {
           godown_id: godownFilter,
           start_date: startDate,
           end_date: endDate,
-          limit: 250
+          limit: pageSize,
+          offset
         }),
         api.getGodowns(),
         api.getCategories()
       ]);
 
-      if (txnRes.success) setTransactions(txnRes.transactions || []);
+      if (txnRes.success) { setTransactions(txnRes.transactions || []); setTotal(txnRes.total || 0); }
       if (gdnRes.success) setGodowns(gdnRes.godowns || []);
       if (catRes.success) setCategories(catRes.categories || []);
     } catch (err) {
@@ -54,7 +58,7 @@ export function StockHistory({ onSelectMaterial }) {
 
   useEffect(() => {
     loadHistory();
-  }, [typeFilter, godownFilter, startDate, endDate]);
+  }, [typeFilter, godownFilter, startDate, endDate, offset]);
 
   useStockSync(() => {
     loadHistory(true);
@@ -62,6 +66,7 @@ export function StockHistory({ onSelectMaterial }) {
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
+    if (offset !== 0) { setOffset(0); return; }
     loadHistory();
   };
 
@@ -187,7 +192,7 @@ export function StockHistory({ onSelectMaterial }) {
             className="form-control"
             style={{ width: '150px', fontSize: '0.85rem' }}
             value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
+              onChange={(e) => { setTypeFilter(e.target.value); setOffset(0); }}
           >
             <option value="">All Types</option>
             <option value="STOCK_IN">Stock IN</option>
@@ -203,7 +208,7 @@ export function StockHistory({ onSelectMaterial }) {
             className="form-control"
             style={{ width: '140px', fontSize: '0.85rem' }}
             value={godownFilter}
-            onChange={(e) => setGodownFilter(e.target.value)}
+            onChange={(e) => { setGodownFilter(e.target.value); setOffset(0); }}
           >
             <option value="">All Godowns</option>
             {godowns.map((g) => (
@@ -219,7 +224,7 @@ export function StockHistory({ onSelectMaterial }) {
             className="form-control"
             style={{ width: '135px', fontSize: '0.8rem' }}
             value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
+            onChange={(e) => { setStartDate(e.target.value); setOffset(0); }}
             title="Start Date"
           />
           <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>to</span>
@@ -228,7 +233,7 @@ export function StockHistory({ onSelectMaterial }) {
             className="form-control"
             style={{ width: '135px', fontSize: '0.8rem' }}
             value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
+            onChange={(e) => { setEndDate(e.target.value); setOffset(0); }}
             title="End Date"
           />
 
@@ -240,6 +245,7 @@ export function StockHistory({ onSelectMaterial }) {
               setGodownFilter('');
               setStartDate('');
               setEndDate('');
+              setOffset(0);
               loadHistory();
             }}
           >
@@ -304,12 +310,13 @@ export function StockHistory({ onSelectMaterial }) {
                         </span>
                       </td>
                       <td style={{ fontWeight: 600 }}>
-                        <div
-                          style={{ cursor: 'pointer', color: 'var(--primary)' }}
+                        <button
+                          type="button"
+                          className="table-link"
                           onClick={() => onSelectMaterial && onSelectMaterial(tx.material_id)}
                         >
                           {tx.material_name}
-                        </div>
+                        </button>
                         <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
                           {tx.material_sku} • {tx.category_name}
                         </span>
@@ -335,6 +342,7 @@ export function StockHistory({ onSelectMaterial }) {
           </table>
         </div>
       )}
+      <div className="pagination-controls"><span>Showing {total ? offset + 1 : 0}–{Math.min(offset + transactions.length, total)} of {total} transactions</span><div><button className="btn btn-secondary btn-sm" disabled={offset === 0 || loading} onClick={() => setOffset(Math.max(0, offset - pageSize))}>Previous</button><button className="btn btn-secondary btn-sm" disabled={offset + pageSize >= total || loading} onClick={() => setOffset(offset + pageSize)}>Next</button></div></div>
     </div>
   );
 }

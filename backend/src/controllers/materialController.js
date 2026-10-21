@@ -28,9 +28,9 @@ function getAllMaterials(req, res) {
     const params = [selectedGodownId, selectedGodownId, selectedGodownId, selectedGodownId];
 
     if (search) {
-      query += ` AND (m.name LIKE ? OR m.sku LIKE ? OR m.brand LIKE ? OR m.size LIKE ? OR m.color LIKE ?)`;
+      query += ` AND (m.name LIKE ? OR m.sku LIKE ? OR m.barcode LIKE ? OR m.brand LIKE ? OR m.size LIKE ? OR m.color LIKE ?)`;
       const term = `%${search.trim()}%`;
-      params.push(term, term, term, term, term);
+      params.push(term, term, term, term, term, term);
     }
 
     if (category_id) {
@@ -148,7 +148,7 @@ function getMaterialById(req, res) {
 function createMaterial(req, res) {
   try {
     const {
-      sku, name, category_id, brand, description, size, color, unit,
+      sku, barcode, name, category_id, brand, description, size, color, unit,
       purchase_price = 0, selling_price = 0, min_stock_level = 10,
       image_url, opening_stocks = {}
     } = req.body;
@@ -174,12 +174,13 @@ function createMaterial(req, res) {
 
     const transaction = db.transaction(() => {
       const insert = db.prepare(`
-        INSERT INTO materials (sku, name, category_id, brand, description, size, color, unit, purchase_price, selling_price, min_stock_level, image_url)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO materials (sku, barcode, name, category_id, brand, description, size, color, unit, purchase_price, selling_price, min_stock_level, image_url)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       const info = insert.run(
         sku.trim().toUpperCase(),
+        barcode ? barcode.trim() : null,
         name.trim(),
         Number(category_id),
         brand ? brand.trim() : null,
@@ -238,7 +239,7 @@ function updateMaterial(req, res) {
   try {
     const { id } = req.params;
     const {
-      sku, name, category_id, brand, description, size, color, unit,
+      sku, barcode, name, category_id, brand, description, size, color, unit,
       purchase_price, selling_price, min_stock_level, image_url
     } = req.body;
 
@@ -262,12 +263,13 @@ function updateMaterial(req, res) {
 
     db.prepare(`
       UPDATE materials
-      SET sku = ?, name = ?, category_id = ?, brand = ?, description = ?,
+      SET sku = ?, barcode = ?, name = ?, category_id = ?, brand = ?, description = ?,
           size = ?, color = ?, unit = ?, purchase_price = ?, selling_price = ?,
           min_stock_level = ?, image_url = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
       sku.trim().toUpperCase(),
+      barcode ? barcode.trim() : null,
       name.trim(),
       Number(category_id),
       brand ? brand.trim() : null,

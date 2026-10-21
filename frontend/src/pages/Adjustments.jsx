@@ -8,13 +8,17 @@ export function Adjustments({ onOpenTransactionModal, onSelectMaterial }) {
   const { user } = useAuth();
   const [adjustments, setAdjustments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [offset, setOffset] = useState(0);
+  const [total, setTotal] = useState(0);
+  const pageSize = 100;
 
   const loadAdjustments = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res = await api.getAdjustments();
+      const res = await api.getAdjustments({ limit: pageSize, offset });
       if (res.success) {
         setAdjustments(res.adjustments || []);
+        setTotal(res.total || 0);
       }
     } catch (err) {
       console.error('Failed to load adjustments:', err);
@@ -25,7 +29,7 @@ export function Adjustments({ onOpenTransactionModal, onSelectMaterial }) {
 
   useEffect(() => {
     loadAdjustments();
-  }, []);
+  }, [offset]);
 
   useStockSync(() => {
     loadAdjustments(true);
@@ -107,12 +111,13 @@ export function Adjustments({ onOpenTransactionModal, onSelectMaterial }) {
                       </td>
                       <td style={{ fontWeight: 600 }}>{a.godown_name}</td>
                       <td style={{ fontWeight: 600 }}>
-                        <div
-                          style={{ cursor: 'pointer', color: 'var(--primary)' }}
+                        <button
+                          type="button"
+                          className="table-link"
                           onClick={() => onSelectMaterial && onSelectMaterial(a.material_id)}
                         >
                           {a.material_name}
-                        </div>
+                        </button>
                         <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{a.material_sku}</span>
                       </td>
                       <td>{a.system_stock} {a.material_unit}</td>
@@ -141,6 +146,7 @@ export function Adjustments({ onOpenTransactionModal, onSelectMaterial }) {
           </table>
         </div>
       )}
+      <div className="pagination-controls"><span>Showing {total ? offset + 1 : 0}–{Math.min(offset + adjustments.length, total)} of {total} adjustments</span><div><button className="btn btn-secondary btn-sm" disabled={offset === 0 || loading} onClick={() => setOffset(Math.max(0, offset - pageSize))}>Previous</button><button className="btn btn-secondary btn-sm" disabled={offset + pageSize >= total || loading} onClick={() => setOffset(offset + pageSize)}>Next</button></div></div>
     </div>
   );
 }

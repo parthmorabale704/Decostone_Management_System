@@ -1,309 +1,164 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { api } from '../services/api';
 import {
-  Bell,
-  Sun,
-  Moon,
-  LogOut,
-  Warehouse,
-  PlusCircle,
-  ArrowDownLeft,
-  ArrowUpRight,
-  ArrowRightLeft,
-  Sliders,
-  User,
-  AlertTriangle,
-  Menu
+  Bell, Sun, Moon, Plus, ArrowDownToLine, ArrowUpFromLine,
+  ArrowLeftRight, SlidersHorizontal, UserRound, LogOut, TriangleAlert, Menu, ChevronDown
 } from 'lucide-react';
 
 export function Navbar({ onOpenTransactionModal, onSelectPage, onMenuClick }) {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [lowStockItems, setLowStockItems] = useState([]);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [openMenu, setOpenMenu] = useState(null);
 
   useEffect(() => {
-    async function fetchLowStock() {
+    let isMounted = true;
+    const fetchLowStock = async () => {
       try {
-        const res = await api.getLowStock();
-        if (res.success) {
-          setLowStockItems(res.lowStockItems || []);
-        }
-      } catch (err) {
-        // quiet error
+        const response = await api.getLowStock();
+        if (isMounted && response.success) setLowStockItems(response.lowStockItems || []);
+      } catch {
+        // Keep the header usable when notifications are temporarily unavailable.
       }
-    }
+    };
     fetchLowStock();
-    const interval = setInterval(fetchLowStock, 20000);
-    return () => clearInterval(interval);
+    const timer = window.setInterval(fetchLowStock, 60_000);
+    return () => {
+      isMounted = false;
+      window.clearInterval(timer);
+    };
   }, []);
 
-  return (
-    <header
-      className="app-navbar"
-      style={{
-        height: '70px',
-        backgroundColor: 'var(--bg-card)',
-        borderBottom: '1px solid var(--border-color)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 28px',
-        position: 'sticky',
-        top: 0,
-        zIndex: 50
-      }}
-    >
-      {/* Left: Warehouse Context / Role Badge */}
-      <div className="navbar-context-group" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <button className="mobile-menu-button btn-icon" onClick={onMenuClick} aria-label="Open navigation">
-          <Menu size={21} />
-        </button>
-        <div
-          className="navbar-location"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            background: 'var(--bg-input)',
-            padding: '6px 14px',
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--border-color)',
-            fontSize: '0.85rem'
-          }}
-        >
-          <Warehouse size={16} color="var(--primary)" />
-          <span style={{ color: 'var(--text-muted)' }}>Location:</span>
-          <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>
-            {user?.assigned_godown_name || 'All Godowns (Central Master)'}
-          </span>
-        </div>
+  useEffect(() => {
+    if (!openMenu) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setOpenMenu(null);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [openMenu]);
 
-        <span className={`navbar-role badge badge-role-${user?.role || 'supervisor'}`}>
-          {user?.role?.toUpperCase()}
-        </span>
+  const canStockIn = user?.role === 'admin' || user?.can_stock_in;
+  const canStockOut = user?.role === 'admin' || user?.can_stock_out;
+  const canTransfer = user?.role === 'admin' || user?.role === 'manager';
+  const canAdjust = user?.role === 'admin' || (user?.role === 'manager' && user?.can_adjust);
+  const openTransaction = (type) => {
+    setOpenMenu(null);
+    onOpenTransactionModal?.(type);
+  };
+
+  return (
+    <header className="app-navbar">
+      <div className="navbar-heading">
+        <button type="button" className="mobile-menu-button btn-icon" onClick={onMenuClick} aria-label="Open main navigation">
+          <Menu size={20} />
+        </button>
+        <div className="navbar-page-copy">
+          <div className="navbar-eyebrow">{user?.role || 'User'} workspace</div>
+          <div className="navbar-page-title">{user?.assigned_godown_name || 'All warehouses'}</div>
+        </div>
       </div>
 
-      {/* Right Actions */}
-      <div className="navbar-actions" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        {/* Quick Transaction Button */}
-        <div className="navbar-quick-actions" style={{ display: 'flex', gap: '6px' }}>
-          {user?.can_stock_in && (
+      <div className="navbar-actions">
+        {(canStockIn || canStockOut || canTransfer || canAdjust) && (
+          <div className="navbar-menu-wrap">
             <button
-              className="btn btn-sm btn-success"
-              onClick={() => onOpenTransactionModal && onOpenTransactionModal('STOCK_IN')}
-              title="Stock IN"
+              type="button"
+              className="btn btn-primary navbar-action-trigger"
+              onClick={() => setOpenMenu(openMenu === 'actions' ? null : 'actions')}
+              aria-expanded={openMenu === 'actions'}
+              aria-haspopup="menu"
             >
-              <ArrowDownLeft size={14} />
-              <span>Stock IN</span>
+              <Plus size={17} aria-hidden="true" />
+              <span>New transaction</span>
+              <ChevronDown size={15} aria-hidden="true" />
             </button>
-          )}
-
-          {user?.can_stock_out && (
-            <button
-              className="btn btn-sm btn-danger"
-              onClick={() => onOpenTransactionModal && onOpenTransactionModal('STOCK_OUT')}
-              title="Stock OUT"
-            >
-              <ArrowUpRight size={14} />
-              <span>Stock OUT</span>
-            </button>
-          )}
-
-          {(user?.role === 'admin' || user?.role === 'manager') && (
-            <button
-              className="btn btn-sm btn-secondary"
-              onClick={() => onOpenTransactionModal && onOpenTransactionModal('TRANSFER')}
-              title="Transfer Material"
-            >
-              <ArrowRightLeft size={14} />
-              <span>Transfer</span>
-            </button>
-          )}
-        </div>
-
-        {/* Low Stock Alerts Notification Bell */}
-        <div style={{ position: 'relative' }}>
-          <button
-            className="btn-icon"
-            onClick={() => setShowNotifications(!showNotifications)}
-            style={{ position: 'relative', background: 'var(--bg-input)', border: '1px solid var(--border-color)' }}
-            title="Notifications"
-          >
-            <Bell size={18} />
-            {lowStockItems.length > 0 && (
-              <span
-                style={{
-                  position: 'absolute',
-                  top: '-4px',
-                  right: '-4px',
-                  background: '#f43f5e',
-                  color: '#fff',
-                  borderRadius: '50%',
-                  width: '18px',
-                  height: '18px',
-                  fontSize: '0.65rem',
-                  fontWeight: 800,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 0 8px rgba(244, 63, 94, 0.6)'
-                }}
-              >
-                {lowStockItems.length}
-              </span>
-            )}
-          </button>
-
-          {showNotifications && (
-            <div
-              className="card-glass"
-              style={{
-                position: 'absolute',
-                top: '46px',
-                right: 0,
-                width: '320px',
-                boxShadow: 'var(--shadow-lg)',
-                padding: '16px',
-                zIndex: 100
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <h4 style={{ fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <AlertTriangle size={16} color="#f59e0b" /> Low Stock Alerts
-                </h4>
-                <span className="badge badge-warning">{lowStockItems.length} items</span>
+            {openMenu === 'actions' && (
+              <div className="header-popover action-popover" role="menu" aria-label="New transaction">
+                {canStockIn && <button role="menuitem" onClick={() => openTransaction('STOCK_IN')}><ArrowDownToLine size={17} /> Receive stock</button>}
+                {canStockOut && <button role="menuitem" onClick={() => openTransaction('STOCK_OUT')}><ArrowUpFromLine size={17} /> Dispatch stock</button>}
+                {canTransfer && <button role="menuitem" onClick={() => openTransaction('TRANSFER')}><ArrowLeftRight size={17} /> Transfer stock</button>}
+                {canAdjust && <button role="menuitem" onClick={() => openTransaction('ADJUSTMENT')}><SlidersHorizontal size={17} /> Adjust stock</button>}
               </div>
+            )}
+          </div>
+        )}
 
+        <div className="navbar-menu-wrap">
+          <button
+            type="button"
+            className="btn-icon header-icon-button notification-trigger"
+            onClick={() => setOpenMenu(openMenu === 'notifications' ? null : 'notifications')}
+            aria-label={`Low stock notifications${lowStockItems.length ? `, ${lowStockItems.length} items` : ''}`}
+            aria-expanded={openMenu === 'notifications'}
+            aria-haspopup="dialog"
+          >
+            <Bell size={19} aria-hidden="true" />
+            {lowStockItems.length > 0 && <span className="notification-count">{lowStockItems.length > 99 ? '99+' : lowStockItems.length}</span>}
+          </button>
+          {openMenu === 'notifications' && (
+            <section className="header-popover notification-popover" role="dialog" aria-label="Low stock notifications">
+              <div className="popover-heading">
+                <div><TriangleAlert size={17} /><strong>Low stock</strong></div>
+                <span className="text-muted">{lowStockItems.length} items</span>
+              </div>
               {lowStockItems.length === 0 ? (
-                <p style={{ fontSize: '0.82rem', color: 'var(--text-dim)', textAlign: 'center', padding: '12px 0' }}>
-                  All materials are adequately stocked.
-                </p>
+                <p className="popover-empty">No materials are below their minimum stock level.</p>
               ) : (
-                <div style={{ maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {lowStockItems.slice(0, 5).map((item, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        padding: '8px 10px',
-                        borderRadius: 'var(--radius-sm)',
-                        background: 'var(--bg-input)',
-                        fontSize: '0.8rem'
-                      }}
-                    >
-                      <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{item.material_name}</div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        <span>{item.godown_name}</span>
-                        <span style={{ color: item.current_stock === 0 ? '#f43f5e' : '#f59e0b', fontWeight: 700 }}>
-                          {item.current_stock} / min {item.min_stock_level} {item.unit}
-                        </span>
-                      </div>
+                <div className="notification-list">
+                  {lowStockItems.slice(0, 6).map((item) => (
+                    <div className="notification-item" key={`${item.godown_id}-${item.material_id}`}>
+                      <strong>{item.material_name}</strong>
+                      <span>{item.godown_name} · {item.current_stock} / {item.min_stock_level} {item.unit}</span>
                     </div>
                   ))}
                 </div>
               )}
-
               <button
-                className="btn btn-sm btn-outline w-full"
-                style={{ marginTop: '12px' }}
+                type="button"
+                className="popover-link"
                 onClick={() => {
-                  setShowNotifications(false);
-                  if (onSelectPage) onSelectPage('low-stock');
+                  setOpenMenu(null);
+                  onSelectPage?.('low-stock');
                 }}
-              >
-                View Low Stock Center
-              </button>
-            </div>
+              >View low-stock page</button>
+            </section>
           )}
         </div>
 
-        {/* Theme Toggle */}
         <button
-          className="btn-icon"
+          type="button"
+          className="btn-icon header-icon-button theme-button"
           onClick={toggleTheme}
-          style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)' }}
-          title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+          aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+          title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
         >
-          {theme === 'dark' ? <Sun size={18} color="#f59e0b" /> : <Moon size={18} />}
+          {theme === 'dark' ? <Sun size={19} aria-hidden="true" /> : <Moon size={19} aria-hidden="true" />}
         </button>
 
-        {/* User Menu */}
-        <div style={{ position: 'relative' }}>
+        <div className="navbar-menu-wrap">
           <button
-            onClick={() => setShowUserMenu(!showUserMenu)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: '4px 8px',
-              borderRadius: 'var(--radius-md)'
-            }}
+            type="button"
+            className="account-trigger"
+            onClick={() => setOpenMenu(openMenu === 'account' ? null : 'account')}
+            aria-expanded={openMenu === 'account'}
+            aria-haspopup="menu"
           >
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, #f59e0b 0%, #b45309 100%)',
-                color: '#0b0f17',
-                fontWeight: 800,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.9rem'
-              }}
-            >
-              {user?.name?.charAt(0) || 'U'}
-            </div>
-            <div className="navbar-user-info" style={{ textAlign: 'left' }}>
-              <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                {user?.name}
-              </div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
-                @{user?.username}
-              </div>
-            </div>
+            <span className="account-avatar" aria-hidden="true">{user?.name?.charAt(0)?.toUpperCase() || 'U'}</span>
+            <span className="navbar-user-info">
+              <strong>{user?.name || 'Account'}</strong>
+              <small>{user?.role || 'User'}</small>
+            </span>
+            <ChevronDown className="account-chevron" size={15} aria-hidden="true" />
           </button>
-
-          {showUserMenu && (
-            <div
-              className="card-glass"
-              style={{
-                position: 'absolute',
-                top: '48px',
-                right: 0,
-                width: '200px',
-                padding: '8px',
-                boxShadow: 'var(--shadow-lg)',
-                zIndex: 100
-              }}
-            >
-              <button
-                className="btn btn-sm btn-outline w-full justify-start"
-                style={{ marginBottom: '6px', border: 'none', textAlign: 'left' }}
-                onClick={() => {
-                  setShowUserMenu(false);
-                  if (onSelectPage) onSelectPage('settings');
-                }}
-              >
-                <User size={14} /> My Profile & Security
+          {openMenu === 'account' && (
+            <div className="header-popover account-popover" role="menu" aria-label="Account menu">
+              <button role="menuitem" onClick={() => { setOpenMenu(null); onSelectPage?.('settings'); }}>
+                <UserRound size={17} /> Profile and security
               </button>
-
-              <div style={{ height: '1px', background: 'var(--border-color)', margin: '4px 0' }} />
-
-              <button
-                className="btn btn-sm btn-danger w-full justify-start"
-                style={{ border: 'none' }}
-                onClick={logout}
-              >
-                <LogOut size={14} /> Logout
-              </button>
+              <button role="menuitem" onClick={logout}><LogOut size={17} /> Sign out</button>
             </div>
           )}
         </div>
