@@ -12,21 +12,21 @@ function getAllCategories(req, res) {
           FROM stock_lots l
           JOIN materials lm ON lm.id = l.material_id
           WHERE lm.category_id = c.id
-            AND (? = 1 OR l.godown_id = ?)
+            AND (? = 1 OR l.godown_id IN (SELECT godown_id FROM user_godowns WHERE user_id = ?))
         ), 0) as total_lot_quantity,
         COALESCE(SUM(s.quantity), 0) as total_stock_quantity
       FROM categories c
       LEFT JOIN materials m ON m.category_id = c.id
       LEFT JOIN stock s ON s.material_id = m.id
-        AND (? = 1 OR s.godown_id = ?)
+        AND (? = 1 OR s.godown_id IN (SELECT godown_id FROM user_godowns WHERE user_id = ?))
       WHERE c.is_deleted = 0
       GROUP BY c.id
       ORDER BY c.name ASC
     `).all(
       req.user.role === 'admin' || req.user.role === 'manager' ? 1 : 0,
-      req.user.assigned_godown_id || -1,
+      req.user.id,
       req.user.role === 'admin' || req.user.role === 'manager' ? 1 : 0,
-      req.user.assigned_godown_id || -1
+      req.user.id
     );
 
     res.json({ success: true, categories });

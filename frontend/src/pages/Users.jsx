@@ -7,9 +7,7 @@ import {
   UserPlus,
   Edit2,
   Trash2,
-  Shield,
   Warehouse,
-  Check,
   X,
   RefreshCw,
   Power
@@ -33,7 +31,7 @@ export function Users() {
     mobile: '',
     password: '',
     role: 'supervisor',
-    assigned_godown_id: '',
+    assigned_godown_ids: [],
     can_stock_in: 1,
     can_stock_out: 1,
     can_adjust: 0
@@ -70,7 +68,7 @@ export function Users() {
       mobile: '',
       password: '',
       role: 'supervisor',
-      assigned_godown_id: godowns.length > 0 ? godowns[0].id : '',
+      assigned_godown_ids: [],
       can_stock_in: 1,
       can_stock_out: 1,
       can_adjust: 0
@@ -87,7 +85,7 @@ export function Users() {
       mobile: u.mobile || '',
       password: '',
       role: u.role,
-      assigned_godown_id: u.assigned_godown_id || '',
+      assigned_godown_ids: u.assigned_godown_ids || (u.assigned_godown_id ? [u.assigned_godown_id] : []),
       can_stock_in: u.can_stock_in ? 1 : 0,
       can_stock_out: u.can_stock_out ? 1 : 0,
       can_adjust: u.can_adjust ? 1 : 0
@@ -116,7 +114,7 @@ export function Users() {
     }
   };
 
-  const handleToggleStatus = async (id, name) => {
+  const handleToggleStatus = async (id) => {
     try {
       const res = await api.toggleUserStatus(id);
       success(res.message);
@@ -157,7 +155,7 @@ export function Users() {
             <h1 style={{ fontSize: '1.75rem', fontWeight: 800 }}>User Management & RBAC</h1>
           </div>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-dim)', marginTop: '2px' }}>
-            Configure system access, godown assignments, and granular operational permissions
+            Add managers and supervisors, assign one or more godowns to each supervisor, and choose their operational permissions. Only one administrator account is allowed.
           </p>
         </div>
 
@@ -179,7 +177,7 @@ export function Users() {
               <tr>
                 <th>User / Name</th>
                 <th>Role</th>
-                <th>Assigned Warehouse</th>
+                <th>Assigned Godowns</th>
                 <th>Stock IN Perm.</th>
                 <th>Stock OUT Perm.</th>
                 <th>Stock Adjust Perm.</th>
@@ -248,7 +246,7 @@ export function Users() {
                           <button
                             className="btn-icon"
                             style={{ color: u.is_active ? '#f59e0b' : '#10b981' }}
-                            onClick={() => handleToggleStatus(u.id, u.name)}
+                            onClick={() => handleToggleStatus(u.id)}
                             title={u.is_active ? 'Deactivate User' : 'Activate User'}
                           >
                             <Power size={16} />
@@ -349,28 +347,33 @@ export function Users() {
                       className="form-control"
                       value={formData.role}
                       onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                      disabled={editingUser?.role === 'admin'}
                       required
                     >
-                      <option value="admin">Admin (Full Control)</option>
+                      {editingUser?.role === 'admin' && <option value="admin">Admin (Single owner account)</option>}
                       <option value="manager">Manager (Operations)</option>
                       <option value="supervisor">Supervisor (Warehouse Staff)</option>
                     </select>
+                    {editingUser?.role === 'admin' && (
+                      <small className="text-muted">The single administrator role cannot be assigned to another account.</small>
+                    )}
                   </div>
 
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Assigned Warehouse</label>
-                    <select
-                      className="form-control"
-                      value={formData.assigned_godown_id}
-                      onChange={(e) => setFormData({ ...formData, assigned_godown_id: e.target.value })}
-                    >
-                      <option value="">-- All Warehouses (Unrestricted) --</option>
+                    <label className="form-label">Assigned Godowns</label>
+                    <div style={{ maxHeight: 150, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 10, display: 'grid', gap: 8 }}>
                       {godowns.map((g) => (
-                        <option key={g.id} value={g.id}>
-                          {g.name}
-                        </option>
+                        <label key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                          <input type="checkbox" checked={formData.assigned_godown_ids.map(Number).includes(Number(g.id))}
+                            onChange={(e) => setFormData(current => ({ ...current, assigned_godown_ids: e.target.checked
+                              ? [...new Set([...current.assigned_godown_ids.map(Number), Number(g.id)])]
+                              : current.assigned_godown_ids.filter(id => Number(id) !== Number(g.id)) }))} />
+                          <span>{g.name}</span>
+                        </label>
                       ))}
-                    </select>
+                      {!godowns.length && <small className="text-muted">No active godowns available.</small>}
+                    </div>
+                    {formData.role === 'supervisor' && <small className="text-muted">Select every godown this supervisor is allowed to manage.</small>}
                   </div>
                 </div>
 

@@ -6,6 +6,7 @@ function getAllMaterials(req, res) {
     const { search, category_id, stock_status, brand } = req.query;
     const godown_id = req.query.godown_id || req.scopedGodownId;
     const selectedGodownId = godown_id ? Number(godown_id) : null;
+    const allGodowns = req.user.role !== 'supervisor';
     const limitValue = Number(req.query.limit ?? 100);
     const offsetValue = Number(req.query.offset ?? 0);
     const safeLimit = Number.isInteger(limitValue) ? Math.min(500, Math.max(1, limitValue)) : 100;
@@ -17,15 +18,16 @@ function getAllMaterials(req, res) {
         (SELECT json_group_array(json_object('godown_id', g.id, 'godown_name', g.name, 'quantity', COALESCE(stk.quantity, 0)))
          FROM godowns g
          LEFT JOIN stock stk ON stk.godown_id = g.id AND stk.material_id = m.id
-         WHERE g.is_active = 1 AND (? IS NULL OR g.id = ?)
+         WHERE g.is_active = 1 AND (? IS NULL OR g.id = ?) AND (? = 1 OR g.id IN (SELECT godown_id FROM user_godowns WHERE user_id = ?))
         ) as godown_stocks
       FROM materials m
       JOIN categories c ON m.category_id = c.id
-      LEFT JOIN stock s ON s.material_id = m.id AND (? IS NULL OR s.godown_id = ?)
+      LEFT JOIN stock s ON s.material_id = m.id AND (? IS NULL OR s.godown_id = ?) AND (? = 1 OR s.godown_id IN (SELECT godown_id FROM user_godowns WHERE user_id = ?))
       WHERE m.is_deleted = 0
     `;
 
-    const params = [selectedGodownId, selectedGodownId, selectedGodownId, selectedGodownId];
+    const params = [selectedGodownId, selectedGodownId, allGodowns ? 1 : 0, req.user.id,
+      selectedGodownId, selectedGodownId, allGodowns ? 1 : 0, req.user.id];
 
     if (search) {
       query += ` AND (m.name LIKE ? OR m.sku LIKE ? OR m.barcode LIKE ? OR m.brand LIKE ? OR m.size LIKE ? OR m.color LIKE ?)`;
@@ -91,15 +93,16 @@ function getMaterialById(req, res) {
     const selectedGodownId = req.query.godown_id || req.scopedGodownId
       ? Number(req.query.godown_id || req.scopedGodownId)
       : null;
+    const allGodowns = req.user.role !== 'supervisor';
     const material = db.prepare(`
       SELECT m.*, c.name as category_name,
         COALESCE(SUM(s.quantity), 0) as total_stock
       FROM materials m
       JOIN categories c ON m.category_id = c.id
-      LEFT JOIN stock s ON s.material_id = m.id AND (? IS NULL OR s.godown_id = ?)
+      LEFT JOIN stock s ON s.material_id = m.id AND (? IS NULL OR s.godown_id = ?) AND (? = 1 OR s.godown_id IN (SELECT godown_id FROM user_godowns WHERE user_id = ?))
       WHERE m.id = ? AND m.is_deleted = 0
       GROUP BY m.id
-    `).get(selectedGodownId, selectedGodownId, id);
+    `).get(selectedGodownId, selectedGodownId, allGodowns ? 1 : 0, req.user.id, id);
 
     if (!material) {
       return res.status(404).json({ success: false, message: 'Material not found.' });
@@ -115,19 +118,19 @@ function getMaterialById(req, res) {
              END as stock_status
       FROM godowns g
       LEFT JOIN stock s ON s.godown_id = g.id AND s.material_id = ?
-      WHERE g.is_active = 1 AND (? IS NULL OR g.id = ?)
+      WHERE g.is_active = 1 AND (? IS NULL OR g.id = ?) AND (? = 1 OR g.id IN (SELECT godown_id FROM user_godowns WHERE user_id = ?))
       ORDER BY g.id ASC
-    `).all(material.min_stock_level, id, selectedGodownId, selectedGodownId);
+    `).all(material.min_stock_level, id, selectedGodownId, selectedGodownId, allGodowns ? 1 : 0, req.user.id);
 
     const movementHistory = db.prepare(`
       SELECT st.*, g.name as godown_name, u.name as user_name
       FROM stock_transactions st
       JOIN godowns g ON st.godown_id = g.id
       JOIN users u ON st.user_id = u.id
-      WHERE st.material_id = ? AND (? IS NULL OR st.godown_id = ?)
+      WHERE st.material_id = ? AND (? IS NULL OR st.godown_id = ?) AND (? = 1 OR st.godown_id IN (SELECT godown_id FROM user_godowns WHERE user_id = ?))
       ORDER BY st.created_at DESC
       LIMIT 50
-    `).all(id, selectedGodownId, selectedGodownId);
+    `).all(id, selectedGodownId, selectedGodownId, allGodowns ? 1 : 0, req.user.id);
 
     const images = db.prepare('SELECT * FROM material_images WHERE material_id = ?').all(id);
 

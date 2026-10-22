@@ -33,6 +33,7 @@ function login(req, res) {
     if (!isMatch) {
       return res.status(401).json({ success: false, message: 'Invalid credentials.' });
     }
+    const assignments = db.prepare(`SELECT ug.godown_id, g.name FROM user_godowns ug JOIN godowns g ON g.id=ug.godown_id WHERE ug.user_id=? ORDER BY g.name`).all(user.id);
 
     // Strict Role-Based Authentication: Verify selected role matches user's actual database role
     if (selectedRole) {
@@ -64,7 +65,9 @@ function login(req, res) {
       mobile: user.mobile,
       role: user.role,
       assigned_godown_id: user.assigned_godown_id,
-      assigned_godown_name: user.assigned_godown_name,
+      assigned_godown_name: assignments.map(item => item.name).join(', ') || (user.role === 'supervisor' ? 'Unassigned' : 'All Warehouses (Central)'),
+      assigned_godown_ids: assignments.map(item => Number(item.godown_id)),
+      assigned_godown_names: assignments.map(item => item.name),
       can_stock_in: Boolean(user.can_stock_in),
       can_stock_out: Boolean(user.can_stock_out),
       can_adjust: Boolean(user.can_adjust)
@@ -100,10 +103,14 @@ function getProfile(req, res) {
       return res.status(404).json({ success: false, message: 'User not found.' });
     }
 
+    const assignments = db.prepare(`SELECT ug.godown_id, g.name FROM user_godowns ug JOIN godowns g ON g.id=ug.godown_id WHERE ug.user_id=? ORDER BY g.name`).all(user.id);
     res.json({
       success: true,
       user: {
         ...user,
+        assigned_godown_ids: assignments.map(item => Number(item.godown_id)),
+        assigned_godown_names: assignments.map(item => item.name),
+        assigned_godown_name: assignments.map(item => item.name).join(', ') || (user.role === 'supervisor' ? 'Unassigned' : 'All Warehouses (Central)'),
         can_stock_in: Boolean(user.can_stock_in),
         can_stock_out: Boolean(user.can_stock_out),
         can_adjust: Boolean(user.can_adjust)

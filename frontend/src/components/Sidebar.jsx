@@ -101,11 +101,19 @@ export function Sidebar({ activePage, onSelectPage, godowns = [], isOpen = false
         inert={isMobileLayout && !isOpen}
       >
         <div className="sidebar-brand">
-          <div className="brand-mark" aria-hidden="true"><Building2 size={21} /></div>
-          <div className="brand-copy">
-            <div className="brand-name">Deco<span>Stone</span></div>
-            <div className="brand-caption">Inventory workspace</div>
-          </div>
+          <button
+            type="button"
+            className="sidebar-brand-home"
+            onClick={() => selectPage('dashboard')}
+            aria-label="DecoStone home"
+            title="Go to Overview"
+          >
+            <span className="brand-mark" aria-hidden="true"><Building2 size={21} /></span>
+            <span className="brand-copy">
+              <span className="brand-name">Deco<span>Stone</span></span>
+              <span className="brand-caption">Inventory workspace</span>
+            </span>
+          </button>
           <button className="sidebar-close-button btn-icon" onClick={onClose} aria-label="Close navigation">
             <X size={19} />
           </button>

@@ -10,8 +10,6 @@ import {
   ArrowRightLeft,
   Sliders,
   AlertTriangle,
-  CheckCircle2,
-  Package
 } from 'lucide-react';
 
 export function TransactionModal({
@@ -30,7 +28,8 @@ export function TransactionModal({
 
   const [type, setType] = useState(initialType);
   const [materialId, setMaterialId] = useState(initialMaterialId || '');
-  const [godownId, setGodownId] = useState(initialGodownId || (user?.assigned_godown_id || ''));
+  const preferredAssignedGodown = user?.assigned_godown_ids?.[0] || user?.assigned_godown_id || '';
+  const [godownId, setGodownId] = useState(initialGodownId || preferredAssignedGodown);
   const [toGodownId, setToGodownId] = useState('');
   const [quantity, setQuantity] = useState('');
   const [physicalStock, setPhysicalStock] = useState('');
@@ -44,19 +43,19 @@ export function TransactionModal({
     if (!isOpen) return;
     setType(initialType);
     setMaterialId(initialMaterialId ?? '');
-    setGodownId(initialGodownId ?? user?.assigned_godown_id ?? '');
+    setGodownId(initialGodownId ?? user?.assigned_godown_ids?.[0] ?? user?.assigned_godown_id ?? '');
     setToGodownId('');
     setQuantity('');
     setPhysicalStock('');
     setReferenceNo('');
     setPartnerName('');
     setRemarks('');
-  }, [isOpen, initialType, initialMaterialId, initialGodownId, user?.assigned_godown_id]);
+  }, [isOpen, initialType, initialMaterialId, initialGodownId, user?.assigned_godown_id, user?.assigned_godown_ids]);
 
   useEffect(() => {
     if (!isOpen || godowns.length === 0) return;
     const currentSourceIsValid = godowns.some(g => String(g.id) === String(godownId));
-    const preferredSource = initialGodownId ?? user?.assigned_godown_id;
+    const preferredSource = initialGodownId ?? user?.assigned_godown_ids?.[0] ?? user?.assigned_godown_id;
     const sourceId = currentSourceIsValid
       ? godownId
       : godowns.some(g => String(g.id) === String(preferredSource))
@@ -71,7 +70,7 @@ export function TransactionModal({
     if (!destinationIsValid) {
       setToGodownId(godowns.find(g => String(g.id) !== String(sourceId))?.id ?? '');
     }
-  }, [isOpen, godowns, godownId, toGodownId, initialGodownId, user?.assigned_godown_id]);
+  }, [isOpen, godowns, godownId, toGodownId, initialGodownId, user?.assigned_godown_id, user?.assigned_godown_ids]);
 
   if (!isOpen) return null;
 
@@ -338,7 +337,7 @@ export function TransactionModal({
                   className="form-control"
                   value={godownId}
                   onChange={(e) => setGodownId(e.target.value)}
-                  disabled={Boolean(user?.assigned_godown_id && user?.role === 'supervisor')}
+                  disabled={Boolean(user?.role === 'supervisor' && (user?.assigned_godown_ids || []).length === 1)}
                   required
                 >
                   <option value="">-- Select Warehouse --</option>

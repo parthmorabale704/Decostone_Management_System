@@ -8,6 +8,12 @@ function fail(res, error, status = 400) {
   return res.status(status).json({ success: false, message: error.message || String(error) });
 }
 
+function canAccessGodown(user, godownId) {
+  if (['admin', 'manager'].includes(user.role)) return true;
+  const ids = user.assigned_godown_ids || (user.assigned_godown_id ? [user.assigned_godown_id] : []);
+  return ids.map(Number).includes(Number(godownId));
+}
+
 function partyList(table) {
   return (req, res) => {
     try {
@@ -40,10 +46,10 @@ function listOrders(req, res) {
       FROM inventory_orders o JOIN godowns g ON g.id=o.godown_id JOIN users u ON u.id=o.created_by
       LEFT JOIN suppliers s ON o.order_type='PURCHASE' AND s.id=o.party_id
       LEFT JOIN customers c ON o.order_type='SALES' AND c.id=o.party_id
-      WHERE (? IS NULL OR o.order_type=?) AND (?=1 OR o.godown_id=?)
+      WHERE (? IS NULL OR o.order_type=?) AND (?=1 OR o.godown_id IN (SELECT godown_id FROM user_godowns WHERE user_id=?))
       ORDER BY o.created_at DESC, o.id DESC LIMIT ? OFFSET ?`)
       .all(type, type, req.user.role === 'admin' || req.user.role === 'manager' ? 1 : 0,
-        req.user.assigned_godown_id || -1, limit, offset);
+        req.user.id, limit, offset);
     res.json({ success: true, orders: rows });
   } catch (error) { fail(res, error, 500); }
 }
@@ -53,7 +59,7 @@ function createOrder(req, res) {
     const { order_type, party_id, godown_id, notes, lines } = req.body;
     if (!['PURCHASE', 'SALES'].includes(order_type) || !Number(party_id) || !Number(godown_id) || !Array.isArray(lines) || !lines.length)
       return fail(res, new Error('Order type, party, warehouse and at least one line are required.'));
-    if (req.user.role === 'supervisor' && Number(godown_id) !== Number(req.user.assigned_godown_id)) return fail(res, new Error('You cannot create an order for this warehouse.'), 403);
+    if (!canAccessGodown(req.user, godown_id)) return fail(res, new Error('You cannot create an order for this warehouse.'), 403);
     const partyTable = order_type === 'PURCHASE' ? 'suppliers' : 'customers';
     if (!db.prepare(`SELECT id FROM ${partyTable} WHERE id=? AND is_active=1`).get(Number(party_id))) return fail(res, new Error('Supplier or customer not found.'));
     const insert = db.transaction(() => {
@@ -83,7 +89,7 @@ function getOrder(req, res) {
       LEFT JOIN suppliers s ON o.order_type='PURCHASE' AND s.id=o.party_id
       LEFT JOIN customers c ON o.order_type='SALES' AND c.id=o.party_id WHERE o.id=?`).get(req.params.id);
     if (!order) return fail(res, new Error('Order not found.'), 404);
-    if (req.user.role === 'supervisor' && Number(order.godown_id) !== Number(req.user.assigned_godown_id)) return fail(res, new Error('Access denied.'), 403);
+    if (!canAccessGodown(req.user, order.godown_id)) return fail(res, new Error('Access denied.'), 403);
     order.lines = db.prepare(`SELECT l.*,m.name material_name,m.sku,m.unit FROM inventory_order_lines l JOIN materials m ON m.id=l.material_id WHERE l.order_id=?`).all(order.id);
     res.json({ success: true, order });
   } catch (error) { fail(res, error, 500); }
@@ -94,7 +100,7 @@ function transitionOrder(req, res) {
     const { action } = req.params;
     const order = db.prepare('SELECT * FROM inventory_orders WHERE id=?').get(req.params.id);
     if (!order) return fail(res, new Error('Order not found.'), 404);
-    if (req.user.role === 'supervisor' && Number(order.godown_id) !== Number(req.user.assigned_godown_id)) return fail(res, new Error('Access denied.'), 403);
+    if (!canAccessGodown(req.user, order.godown_id)) return fail(res, new Error('Access denied.'), 403);
     const allowed = {
       submit: ['DRAFT', 'PENDING_APPROVAL'], approve: ['PENDING_APPROVAL', 'APPROVED'],
       reject: ['PENDING_APPROVAL', 'REJECTED'], cancel: ['DRAFT', 'CANCELLED']
@@ -146,7 +152,7 @@ function transitionOrder(req, res) {
 function createCount(req, res) {
   try {
     const godownId = Number(req.body.godown_id);
-    if (!godownId || (req.user.role === 'supervisor' && godownId !== Number(req.user.assigned_godown_id))) return fail(res, new Error('A permitted warehouse is required.'), 403);
+    if (!godownId || !canAccessGodown(req.user, godownId)) return fail(res, new Error('A permitted warehouse is required.'), 403);
     const result = db.transaction(() => {
       const count = db.prepare('SELECT COUNT(*) n FROM count_sessions').get().n + 1;
       const sessionNo = `CNT-${new Date().getFullYear()}-${String(count).padStart(5, '0')}`;
@@ -165,8 +171,8 @@ function listCounts(req, res) {
   try {
     const sessions = db.prepare(`SELECT c.*,g.name godown_name,u.name created_by_name FROM count_sessions c
       JOIN godowns g ON g.id=c.godown_id JOIN users u ON u.id=c.created_by
-      WHERE (?=1 OR c.godown_id=?) ORDER BY c.created_at DESC LIMIT 100`)
-      .all(req.user.role === 'admin' || req.user.role === 'manager' ? 1 : 0, req.user.assigned_godown_id || -1);
+      WHERE (?=1 OR c.godown_id IN (SELECT godown_id FROM user_godowns WHERE user_id=?)) ORDER BY c.created_at DESC LIMIT 100`)
+      .all(req.user.role === 'admin' || req.user.role === 'manager' ? 1 : 0, req.user.id);
     res.json({ success: true, sessions });
   } catch (error) { fail(res, error, 500); }
 }
@@ -177,8 +183,8 @@ function listLots(req, res) {
     const offset = Math.max(0, Number(req.query.offset) || 0);
     const lots = db.prepare(`SELECT l.*,m.name material_name,m.sku,m.unit,g.name godown_name
       FROM stock_lots l JOIN materials m ON m.id=l.material_id JOIN godowns g ON g.id=l.godown_id
-      WHERE l.quantity>0 AND (?=1 OR l.godown_id=?) ORDER BY l.created_at DESC LIMIT ? OFFSET ?`)
-      .all(['admin','manager'].includes(req.user.role) ? 1 : 0, req.user.assigned_godown_id || -1, limit, offset);
+      WHERE l.quantity>0 AND (?=1 OR l.godown_id IN (SELECT godown_id FROM user_godowns WHERE user_id=?)) ORDER BY l.created_at DESC LIMIT ? OFFSET ?`)
+      .all(['admin','manager'].includes(req.user.role) ? 1 : 0, req.user.id, limit, offset);
     res.json({ success: true, lots });
   } catch (error) { fail(res, error, 500); }
 }
@@ -187,7 +193,7 @@ function getCount(req, res) {
   try {
     const session = db.prepare(`SELECT c.*,g.name godown_name FROM count_sessions c JOIN godowns g ON g.id=c.godown_id WHERE c.id=?`).get(req.params.id);
     if (!session) return fail(res, new Error('Count session not found.'), 404);
-    if (req.user.role === 'supervisor' && Number(session.godown_id) !== Number(req.user.assigned_godown_id)) return fail(res, new Error('Access denied.'), 403);
+    if (!canAccessGodown(req.user, session.godown_id)) return fail(res, new Error('Access denied.'), 403);
     session.lines = db.prepare(`SELECT l.*,m.name material_name,m.sku,m.unit FROM count_session_lines l
       JOIN materials m ON m.id=l.material_id WHERE l.session_id=? ORDER BY m.name`).all(session.id);
     res.json({ success: true, session });
@@ -199,9 +205,9 @@ function updateCountLine(req, res) {
     const { counted_quantity } = req.body;
     if (!Number.isFinite(Number(counted_quantity)) || Number(counted_quantity) < 0) return fail(res, new Error('Count must be zero or greater.'));
     const result = db.prepare(`UPDATE count_session_lines SET counted_quantity=? WHERE id=? AND session_id IN
-      (SELECT id FROM count_sessions WHERE status='DRAFT' AND id=? AND (?=1 OR godown_id=?))`)
+      (SELECT id FROM count_sessions WHERE status='DRAFT' AND id=? AND (?=1 OR godown_id IN (SELECT godown_id FROM user_godowns WHERE user_id=?)))`)
       .run(Number(counted_quantity), req.params.lineId, req.params.sessionId,
-        ['admin','manager'].includes(req.user.role) ? 1 : 0, req.user.assigned_godown_id || -1);
+        ['admin','manager'].includes(req.user.role) ? 1 : 0, req.user.id);
     if (!result.changes) return fail(res, new Error('Count line not found or session is locked.'), 404);
     res.json({ success: true });
   } catch (error) { fail(res, error); }
@@ -211,7 +217,7 @@ function submitCount(req, res) {
   try {
     const session = db.prepare('SELECT * FROM count_sessions WHERE id=?').get(req.params.id);
     if (!session || session.status !== 'DRAFT') return fail(res, new Error('Draft count session not found.'), 404);
-    if (req.user.role === 'supervisor' && Number(session.godown_id) !== Number(req.user.assigned_godown_id)) return fail(res, new Error('Access denied.'), 403);
+    if (!canAccessGodown(req.user, session.godown_id)) return fail(res, new Error('Access denied.'), 403);
     const missing = db.prepare('SELECT COUNT(*) n FROM count_session_lines WHERE session_id=? AND counted_quantity IS NULL').get(session.id).n;
     if (missing) return fail(res, new Error(`Enter all counts before submission (${missing} remaining).`));
     const status = 'PENDING_APPROVAL';

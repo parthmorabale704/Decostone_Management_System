@@ -45,6 +45,13 @@ db.exec(`
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS user_godowns (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    godown_id INTEGER NOT NULL REFERENCES godowns(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, godown_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_user_godowns_godown ON user_godowns(godown_id, user_id);
+
   CREATE TABLE IF NOT EXISTS categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
@@ -230,9 +237,22 @@ ensureColumn('categories', 'is_deleted', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('inventory_order_lines', 'shade_code', 'TEXT');
 ensureColumn('inventory_order_lines', 'caliber', 'TEXT');
 ensureColumn('notification_outbox', 'dedupe_key', 'TEXT');
+// Keep legacy single-godown assignments while normalizing access to support multiple godowns.
+db.exec(`INSERT OR IGNORE INTO user_godowns (user_id, godown_id)
+  SELECT id, assigned_godown_id FROM users WHERE assigned_godown_id IS NOT NULL`);
+// Keep a single administrator owner. Legacy extra admin accounts retain their
+// accounts and operational access as managers, but lose administrator access.
+db.prepare(`
+  UPDATE users
+  SET role = 'manager', updated_at = CURRENT_TIMESTAMP
+  WHERE role = 'admin'
+    AND id != (SELECT MIN(id) FROM users WHERE role = 'admin')
+`).run();
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_single_admin ON users(role) WHERE role = 'admin'");
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_materials_barcode ON materials(barcode) WHERE barcode IS NOT NULL AND barcode <> ''");
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_dedupe ON notification_outbox(dedupe_key) WHERE dedupe_key IS NOT NULL');
 db.prepare('INSERT OR IGNORE INTO schema_migrations(version,name) VALUES(1,?)').run('operations-and-barcode-foundation');
 db.prepare('INSERT OR IGNORE INTO schema_migrations(version,name) VALUES(2,?)').run('barcode-lot-alert-additions');
+db.prepare('INSERT OR IGNORE INTO schema_migrations(version,name) VALUES(3,?)').run('multi-godown-supervisor-assignments');
 
 module.exports = db;

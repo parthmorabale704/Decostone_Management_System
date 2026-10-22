@@ -24,9 +24,9 @@ function getAllGodowns(req, res) {
           WHERE s.godown_id = g.id AND m.is_deleted = 0 AND s.quantity <= m.min_stock_level
         ), 0) as low_stock_count
       FROM godowns g
-      WHERE (? = 1 OR g.id = ?)
+      WHERE (? = 1 OR g.id IN (SELECT godown_id FROM user_godowns WHERE user_id = ?))
       ORDER BY g.id ASC
-    `).all(req.user.role === 'admin' || req.user.role === 'manager' ? 1 : 0, req.user.assigned_godown_id || -1);
+    `).all(req.user.role === 'admin' || req.user.role === 'manager' ? 1 : 0, req.user.id);
 
     // If supervisor, optionally mark or filter
     res.json({ success: true, godowns });

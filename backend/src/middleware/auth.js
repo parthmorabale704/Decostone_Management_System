@@ -26,6 +26,8 @@ function authenticateToken(req, res, next) {
       return res.status(403).json({ success: false, message: 'Your account has been deactivated. Please contact the administrator.' });
     }
 
+    user.assigned_godown_ids = db.prepare('SELECT godown_id FROM user_godowns WHERE user_id = ? ORDER BY godown_id').all(user.id).map(row => Number(row.godown_id));
+
     req.user = user;
     next();
   } catch (err) {
@@ -76,20 +78,22 @@ function checkGodownAccess(godownIdParam = 'godown_id') {
       return next();
     }
     const requestedGodownId = req.params[godownIdParam] ?? (req.body || {})[godownIdParam] ?? req.query[godownIdParam];
-    if (!req.user.assigned_godown_id) {
+    const assignedGodownIds = req.user.assigned_godown_ids || (req.user.assigned_godown_id ? [Number(req.user.assigned_godown_id)] : []);
+    if (!assignedGodownIds.length) {
       return res.status(403).json({ success: false, message: 'No warehouse is assigned to this account.' });
     }
     if (requestedGodownId === undefined || requestedGodownId === null || requestedGodownId === '') {
       if (req.method === 'GET' && req.query) {
-        req.scopedGodownId = String(req.user.assigned_godown_id);
+        req.scopedGodownIds = assignedGodownIds.map(String);
+        if (assignedGodownIds.length === 1) req.scopedGodownId = String(assignedGodownIds[0]);
         return next();
       }
       return res.status(400).json({ success: false, message: 'A warehouse must be selected.' });
     }
-    if (!Number.isInteger(Number(requestedGodownId)) || Number(requestedGodownId) !== Number(req.user.assigned_godown_id)) {
+    if (!Number.isInteger(Number(requestedGodownId)) || !assignedGodownIds.includes(Number(requestedGodownId))) {
       return res.status(403).json({
         success: false,
-        message: 'Forbidden: You only have access to your assigned warehouse.'
+        message: 'Forbidden: You do not have access to this warehouse.'
       });
     }
     next();

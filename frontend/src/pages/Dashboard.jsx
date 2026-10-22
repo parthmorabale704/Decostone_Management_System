@@ -1,19 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import { useStockSync } from '../hooks/useStockSync';
 import { StatCard } from '../components/StatCard';
-import { StockBadge } from '../components/StockBadge';
 import {
   Boxes,
   Layers,
   Warehouse,
   AlertTriangle,
-  ArrowDownLeft,
-  ArrowUpRight,
-  ArrowRightLeft,
   TrendingUp,
   RefreshCw,
-  Eye,
   Plus
 } from 'lucide-react';
 import {
@@ -24,11 +19,11 @@ import {
   YAxis,
   Tooltip,
   Legend,
+  LineChart,
+  Line,
   PieChart,
   Pie,
   Cell,
-  AreaChart,
-  Area,
   CartesianGrid
 } from 'recharts';
 
@@ -38,8 +33,8 @@ export function Dashboard({ onOpenTransactionModal, onSelectMaterial, onSelectPa
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchSummary = async (silent = false) => {
-    if (!silent && !data) setLoading(true);
+  const fetchSummary = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await api.getDashboardSummary();
       if (res.success) {
@@ -50,11 +45,11 @@ export function Dashboard({ onOpenTransactionModal, onSelectMaterial, onSelectPa
     } finally {
       if (!silent) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchSummary();
-  }, []);
+  }, [fetchSummary]);
 
   useStockSync(() => {
     fetchSummary(true);
@@ -81,6 +76,20 @@ export function Dashboard({ onOpenTransactionModal, onSelectMaterial, onSelectPa
   })) || [];
 
   const trendData = data?.movementTrends || [];
+  const movementByDate = new Map(trendData.map((movement) => [movement.date, movement]));
+  const trendChartData = Array.from({ length: 30 }, (_, index) => {
+    const day = new Date();
+    day.setUTCHours(0, 0, 0, 0);
+    day.setUTCDate(day.getUTCDate() - (29 - index));
+    const date = day.toISOString().slice(0, 10);
+    return {
+      date,
+      stock_in: 0,
+      stock_out: 0,
+      transfers: 0,
+      ...movementByDate.get(date)
+    };
+  });
 
   return (
     <div className="page-wrapper">
@@ -276,16 +285,16 @@ export function Dashboard({ onOpenTransactionModal, onSelectMaterial, onSelectPa
         ) : (
           <div style={{ width: '100%', height: '260px' }}>
             <ResponsiveContainer>
-              <AreaChart data={trendData}>
+              <LineChart data={trendChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="date" stroke="var(--text-dim)" fontSize={12} />
+                <XAxis dataKey="date" stroke="var(--text-dim)" fontSize={12} tickFormatter={(date) => date.slice(5)} />
                 <YAxis stroke="var(--text-dim)" fontSize={12} />
                 <Tooltip contentStyle={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)', borderRadius: '8px' }} />
                 <Legend />
-                <Area type="monotone" dataKey="stock_in" name="Stock In" stroke="#10b981" fill="#10b981" fillOpacity={0.16} />
-                <Area type="monotone" dataKey="stock_out" name="Stock Out" stroke="#f43f5e" fill="#f43f5e" fillOpacity={0.14} />
-                <Area type="monotone" dataKey="transfers" name="Transfers" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.12} />
-              </AreaChart>
+                <Line type="monotone" dataKey="stock_in" name="Stock In" stroke="#10b981" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="stock_out" name="Stock Out" stroke="#f43f5e" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="transfers" name="Transfers" stroke="#06b6d4" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+              </LineChart>
             </ResponsiveContainer>
           </div>
         )}

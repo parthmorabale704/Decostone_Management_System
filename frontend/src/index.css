@@ -769,6 +769,27 @@ textarea:focus-visible,
   border-bottom: 1px solid var(--border-color);
 }
 
+.sidebar-brand-home {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-brand-home:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
 .brand-mark {
   flex: 0 0 38px;
   width: 38px;
@@ -1290,8 +1311,53 @@ textarea:focus-visible,
   .operations-party-form { grid-template-columns: 1fr; }
 }
 @media print {
+  @page { size: landscape; margin: 12mm; }
   body * { visibility: hidden !important; }
   .operations-label-preview, .operations-label-preview * { visibility: visible !important; }
   .operations-label-preview { position: absolute; inset: 10mm auto auto 10mm; width: 80mm; border: 1px solid #000; color: #000; }
   .no-print { display: none !important; }
+
+  .report-print-root,
+  .report-print-root * { visibility: visible !important; }
+  .report-print-root {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    max-width: none;
+    margin: 0 !important;
+    padding: 0 !important;
+    animation: none !important;
+    background: #fff !important;
+    color: #111 !important;
+  }
+  .report-print-root * {
+    color: #111 !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+  }
+  .report-print-root .report-print-title {
+    display: block;
+    margin: 0 0 12px;
+    font-size: 18pt;
+  }
+  .report-print-root .report-print-table {
+    width: 100%;
+    overflow: visible !important;
+  }
+  .report-print-root .data-table {
+    width: 100%;
+    min-width: 0 !important;
+    border-collapse: collapse;
+  }
+  .report-print-root .data-table thead { display: table-header-group; }
+  .report-print-root .data-table tr { break-inside: avoid; }
+  .report-print-root .data-table th,
+  .report-print-root .data-table td {
+    padding: 6px !important;
+    border: 1px solid #bbb !important;
+    background: #fff !important;
+    color: #111 !important;
+  }
 }
+
+.report-print-title { display: none; }

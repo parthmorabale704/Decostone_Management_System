@@ -136,6 +136,11 @@ function getTransactions(req, res) {
 
     const params = [];
 
+    if (req.user.role === 'supervisor') {
+      query += ` AND st.godown_id IN (SELECT godown_id FROM user_godowns WHERE user_id = ?)`;
+      params.push(req.user.id);
+    }
+
     if (godown_id) {
       query += ` AND st.godown_id = ?`;
       params.push(godown_id);
@@ -187,8 +192,8 @@ function getTransfers(req, res) {
     const safeLimit = Number.isInteger(limitValue) ? Math.min(500, Math.max(1, limitValue)) : 50;
     const safeOffset = Number.isInteger(offsetValue) ? Math.max(0, offsetValue) : 0;
 
-    const filters = `FROM stock_transfers t WHERE (? = 1 OR t.from_godown_id = ? OR t.to_godown_id = ?)`;
-    const args = [req.user.role === 'admin' || req.user.role === 'manager' ? 1 : 0, req.user.assigned_godown_id || -1, req.user.assigned_godown_id || -1];
+    const filters = `FROM stock_transfers t WHERE (? = 1 OR EXISTS (SELECT 1 FROM user_godowns ug WHERE ug.user_id = ? AND ug.godown_id IN (t.from_godown_id,t.to_godown_id)))`;
+    const args = [req.user.role === 'admin' || req.user.role === 'manager' ? 1 : 0, req.user.id];
     const total = db.prepare(`SELECT COUNT(*) total ${filters}`).get(...args).total;
     const transfers = db.prepare(`
       SELECT t.*,
@@ -203,10 +208,10 @@ function getTransfers(req, res) {
       JOIN godowns tg ON t.to_godown_id = tg.id
       JOIN materials m ON t.material_id = m.id
       JOIN users u ON t.user_id = u.id
-      WHERE (? = 1 OR t.from_godown_id = ? OR t.to_godown_id = ?)
+      WHERE (? = 1 OR EXISTS (SELECT 1 FROM user_godowns ug WHERE ug.user_id = ? AND ug.godown_id IN (t.from_godown_id,t.to_godown_id)))
       ORDER BY t.created_at DESC
       LIMIT ? OFFSET ?
-    `).all(req.user.role === 'admin' || req.user.role === 'manager' ? 1 : 0, req.user.assigned_godown_id || -1, req.user.assigned_godown_id || -1, safeLimit, safeOffset);
+    `).all(req.user.role === 'admin' || req.user.role === 'manager' ? 1 : 0, req.user.id, safeLimit, safeOffset);
 
     res.json({ success: true, transfers, total, hasMore: safeOffset + transfers.length < total });
   } catch (error) {
@@ -220,8 +225,8 @@ function getAdjustments(req, res) {
     const offsetValue = Number(req.query.offset ?? 0);
     const safeLimit = Number.isInteger(limitValue) ? Math.min(500, Math.max(1, limitValue)) : 100;
     const safeOffset = Number.isInteger(offsetValue) ? Math.max(0, offsetValue) : 0;
-    const scope = [req.user.role === 'admin' || req.user.role === 'manager' ? 1 : 0, req.user.assigned_godown_id || -1];
-    const total = db.prepare('SELECT COUNT(*) total FROM stock_adjustments a WHERE (?=1 OR a.godown_id=?)').get(...scope).total;
+    const scope = [req.user.role === 'admin' || req.user.role === 'manager' ? 1 : 0, req.user.id];
+    const total = db.prepare('SELECT COUNT(*) total FROM stock_adjustments a WHERE (?=1 OR a.godown_id IN (SELECT godown_id FROM user_godowns WHERE user_id=?))').get(...scope).total;
     const adjustments = db.prepare(`
       SELECT a.*,
              g.name as godown_name,
@@ -233,7 +238,7 @@ function getAdjustments(req, res) {
       JOIN godowns g ON a.godown_id = g.id
       JOIN materials m ON a.material_id = m.id
       JOIN users u ON a.user_id = u.id
-      WHERE (? = 1 OR a.godown_id = ?)
+      WHERE (? = 1 OR a.godown_id IN (SELECT godown_id FROM user_godowns WHERE user_id = ?))
       ORDER BY a.created_at DESC
       LIMIT ? OFFSET ?
     `).all(...scope, safeLimit, safeOffset);
@@ -247,18 +252,18 @@ function getAdjustments(req, res) {
 function getLowStockAlerts(req, res) {
   try {
     const lowStockItems = db.prepare(`
-      SELECT s.godown_id, s.material_id, s.quantity as current_stock,
+      SELECT g.id as godown_id, m.id as material_id, COALESCE(s.quantity, 0) as current_stock,
              g.name as godown_name,
              m.name as material_name, m.sku, m.unit, m.min_stock_level, m.purchase_price,
              c.name as category_name
-      FROM stock s
-      JOIN godowns g ON s.godown_id = g.id
-      JOIN materials m ON s.material_id = m.id
+      FROM materials m
       JOIN categories c ON m.category_id = c.id
-      WHERE m.is_deleted = 0 AND s.quantity <= m.min_stock_level
-        AND (? = 1 OR s.godown_id = ?)
-      ORDER BY s.quantity ASC
-    `).all(req.user.role === 'admin' || req.user.role === 'manager' ? 1 : 0, req.user.assigned_godown_id || -1);
+      CROSS JOIN godowns g
+      LEFT JOIN stock s ON s.godown_id = g.id AND s.material_id = m.id
+      WHERE m.is_deleted = 0 AND g.is_active = 1 AND COALESCE(s.quantity, 0) <= m.min_stock_level
+        AND (? = 1 OR g.id IN (SELECT godown_id FROM user_godowns WHERE user_id = ?))
+      ORDER BY COALESCE(s.quantity, 0) ASC, m.name ASC
+    `).all(req.user.role === 'admin' || req.user.role === 'manager' ? 1 : 0, req.user.id);
 
     res.json({ success: true, lowStockItems, count: lowStockItems.length });
   } catch (error) {

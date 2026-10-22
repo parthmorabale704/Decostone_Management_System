@@ -3,7 +3,7 @@ const db = require('../db/database');
 function getDashboardSummary(req, res) {
   try {
     const allGodowns = req.user.role === 'admin' || req.user.role === 'manager';
-    const assignedGodownId = req.user.assigned_godown_id || -1;
+    const assignedGodownId = req.user.id;
     const totalMaterials = db.prepare('SELECT COUNT(*) as count FROM materials WHERE is_deleted = 0').get().count;
     const totalCategories = db.prepare('SELECT COUNT(*) as count FROM categories WHERE is_deleted = 0').get().count;
     const totalStock = db.prepare(`
@@ -11,7 +11,7 @@ function getDashboardSummary(req, res) {
              COALESCE(SUM(s.quantity * m.purchase_price), 0) as total_value
       FROM stock s
       JOIN materials m ON s.material_id = m.id
-      WHERE m.is_deleted = 0 AND (? = 1 OR s.godown_id = ?)
+      WHERE m.is_deleted = 0 AND (? = 1 OR s.godown_id IN (SELECT godown_id FROM user_godowns WHERE user_id = ?))
     `).get(allGodowns ? 1 : 0, assignedGodownId);
 
     // Godown breakdown
@@ -22,24 +22,23 @@ function getDashboardSummary(req, res) {
       FROM godowns g
       LEFT JOIN stock s ON s.godown_id = g.id
       LEFT JOIN materials m ON s.material_id = m.id AND m.is_deleted = 0
-      WHERE g.is_active = 1 AND (? = 1 OR g.id = ?)
+      WHERE g.is_active = 1 AND (? = 1 OR g.id IN (SELECT godown_id FROM user_godowns WHERE user_id = ?))
       GROUP BY g.id
       ORDER BY g.id ASC
     `).all(allGodowns ? 1 : 0, assignedGodownId);
 
-    // Low stock count (distinct materials where total stock <= min_stock_level)
+    // Include every out-of-stock and low-stock material, with zero balances first.
     const lowStockMaterials = db.prepare(`
       SELECT m.id, m.name, m.sku, m.min_stock_level, m.unit, c.name as category_name,
              COUNT(*) OVER() as total_low_stock_count,
              COALESCE(SUM(s.quantity), 0) as total_stock
       FROM materials m
       JOIN categories c ON m.category_id = c.id
-      LEFT JOIN stock s ON s.material_id = m.id AND (? = 1 OR s.godown_id = ?)
+      LEFT JOIN stock s ON s.material_id = m.id AND (? = 1 OR s.godown_id IN (SELECT godown_id FROM user_godowns WHERE user_id = ?))
       WHERE m.is_deleted = 0
       GROUP BY m.id
       HAVING total_stock <= m.min_stock_level
-      ORDER BY total_stock ASC
-      LIMIT 10
+      ORDER BY CASE WHEN total_stock = 0 THEN 0 ELSE 1 END, total_stock ASC, m.name ASC
     `).all(allGodowns ? 1 : 0, assignedGodownId);
 
     // Today's stats
@@ -52,7 +51,7 @@ function getDashboardSummary(req, res) {
         COALESCE(SUM(CASE WHEN ${allGodowns ? "transaction_type = 'TRANSFER_IN'" : "transaction_type IN ('TRANSFER_IN', 'TRANSFER_OUT')"} THEN quantity ELSE 0 END), 0) as today_transfer_qty,
         COALESCE(COUNT(CASE WHEN ${allGodowns ? "transaction_type = 'TRANSFER_IN'" : "transaction_type IN ('TRANSFER_IN', 'TRANSFER_OUT')"} THEN 1 END), 0) as today_transfer_txns
       FROM stock_transactions
-      WHERE DATE(created_at) = DATE('now', 'localtime') AND (? = 1 OR godown_id = ?)
+      WHERE DATE(created_at) = DATE('now', 'localtime') AND (? = 1 OR godown_id IN (SELECT godown_id FROM user_godowns WHERE user_id = ?))
     `).get(allGodowns ? 1 : 0, assignedGodownId);
 
     // Category distribution for charts
@@ -60,7 +59,7 @@ function getDashboardSummary(req, res) {
       SELECT c.name, COALESCE(SUM(s.quantity), 0) as total_stock
       FROM categories c
       LEFT JOIN materials m ON m.category_id = c.id AND m.is_deleted = 0
-      LEFT JOIN stock s ON s.material_id = m.id AND (? = 1 OR s.godown_id = ?)
+      LEFT JOIN stock s ON s.material_id = m.id AND (? = 1 OR s.godown_id IN (SELECT godown_id FROM user_godowns WHERE user_id = ?))
       WHERE c.is_deleted = 0
       GROUP BY c.id
       ORDER BY total_stock DESC
@@ -74,7 +73,7 @@ function getDashboardSummary(req, res) {
         SUM(CASE WHEN transaction_type = 'STOCK_OUT' THEN quantity ELSE 0 END) as stock_out,
         SUM(CASE WHEN ${allGodowns ? "transaction_type = 'TRANSFER_IN'" : "transaction_type IN ('TRANSFER_IN', 'TRANSFER_OUT')"} THEN quantity ELSE 0 END) as transfers
       FROM stock_transactions
-      WHERE created_at >= DATE('now', '-30 days') AND (? = 1 OR godown_id = ?)
+      WHERE created_at >= DATE('now', '-30 days') AND (? = 1 OR godown_id IN (SELECT godown_id FROM user_godowns WHERE user_id = ?))
       GROUP BY strftime('%Y-%m-%d', created_at)
       ORDER BY date ASC
     `).all(allGodowns ? 1 : 0, assignedGodownId);
@@ -86,7 +85,7 @@ function getDashboardSummary(req, res) {
       JOIN materials m ON st.material_id = m.id
       JOIN godowns g ON st.godown_id = g.id
       JOIN users u ON st.user_id = u.id
-      WHERE (? = 1 OR st.godown_id = ?)
+      WHERE (? = 1 OR st.godown_id IN (SELECT godown_id FROM user_godowns WHERE user_id = ?))
       ORDER BY st.created_at DESC
       LIMIT 10
     `).all(allGodowns ? 1 : 0, assignedGodownId);
@@ -189,30 +188,9 @@ function getMaterialMovementReport(req, res) {
   }
 }
 
-function getUserActivityReport(req, res) {
-  try {
-    const report = db.prepare(`
-      SELECT u.id, u.name, u.username, u.role,
-             COUNT(DISTINCT st.id) as transactions_performed,
-             COUNT(DISTINCT al.id) as audit_actions_logged,
-             MAX(al.created_at) as last_active_at
-      FROM users u
-      LEFT JOIN stock_transactions st ON st.user_id = u.id
-      LEFT JOIN audit_logs al ON al.user_id = u.id
-      GROUP BY u.id
-      ORDER BY transactions_performed DESC
-    `).all();
-
-    res.json({ success: true, report });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-}
-
 module.exports = {
   getDashboardSummary,
   getGodownWiseReport,
   getCategoryWiseReport,
-  getMaterialMovementReport,
-  getUserActivityReport
+  getMaterialMovementReport
 };

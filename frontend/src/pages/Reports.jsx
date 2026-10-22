@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import { useStockSync } from '../hooks/useStockSync';
 import { exportToPdf, exportToExcel } from '../utils/exports';
@@ -7,13 +7,11 @@ import {
   Warehouse,
   Layers,
   TrendingUp,
-  Users,
   Printer,
   FileSpreadsheet,
   FileText,
   RefreshCw,
-  Calendar,
-  Search
+  Calendar
 } from 'lucide-react';
 
 export function Reports() {
@@ -22,8 +20,13 @@ export function Reports() {
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const reportTitle = {
+    'godown-wise': 'Godown-Wise Stock Report',
+    'category-wise': 'Category-Wise Stock Report',
+    movement: 'Material Velocity Report'
+  }[activeReport];
 
-  const loadReport = async (silent = false) => {
+  const loadReport = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
       let res;
@@ -33,8 +36,6 @@ export function Reports() {
         res = await api.getCategoryWiseReport();
       } else if (activeReport === 'movement') {
         res = await api.getMaterialMovementReport({ start_date: startDate, end_date: endDate });
-      } else if (activeReport === 'user-activity') {
-        res = await api.getUserActivityReport();
       }
 
       if (res?.success) {
@@ -45,11 +46,11 @@ export function Reports() {
     } finally {
       if (!silent) setLoading(false);
     }
-  };
+  }, [activeReport, startDate, endDate]);
 
   useEffect(() => {
     loadReport();
-  }, [activeReport, startDate, endDate]);
+  }, [loadReport]);
 
   useStockSync(() => {
     loadReport(true);
@@ -87,15 +88,6 @@ export function Reports() {
         'Total OUT': r.total_out,
         'Total Transferred': r.total_transferred,
         'Current Stock Balance': r.current_stock
-      }));
-    } else if (activeReport === 'user-activity') {
-      data = reportData.map((r) => ({
-        'User Name': r.name,
-        'Username': r.username,
-        'Role': r.role,
-        'Transactions Recorded': r.transactions_performed,
-        'Audit Actions': r.audit_actions_logged,
-        'Last Active': r.last_active_at || 'Never'
       }));
     }
 
@@ -142,17 +134,6 @@ export function Reports() {
         r.total_transferred,
         r.current_stock
       ]);
-    } else if (activeReport === 'user-activity') {
-      title = 'User Operational Activity & Audit Report';
-      columns = ['User Name', 'Username', 'Role', 'Txns Logged', 'Audit Logs', 'Last Active'];
-      rows = reportData.map((r) => [
-        r.name,
-        `@${r.username}`,
-        r.role.toUpperCase(),
-        r.transactions_performed,
-        r.audit_actions_logged,
-        r.last_active_at ? new Date(r.last_active_at).toLocaleString() : 'N/A'
-      ]);
     }
 
     exportToPdf({
@@ -164,7 +145,7 @@ export function Reports() {
   };
 
   return (
-    <div className="page-wrapper">
+    <div className="page-wrapper report-print-root">
       {/* Header */}
       <div
         className="report-selector-grid"
@@ -187,7 +168,7 @@ export function Reports() {
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div className="no-print" style={{ display: 'flex', gap: '10px' }}>
           <button className="btn btn-secondary btn-sm" onClick={handlePrint}>
             <Printer size={15} /> Print
           </button>
@@ -202,9 +183,10 @@ export function Reports() {
 
       {/* Report Selection Tabs */}
       <div
+        className="no-print"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
+          gridTemplateColumns: 'repeat(3, 1fr)',
           gap: '12px',
           marginBottom: '24px'
         }}
@@ -260,27 +242,11 @@ export function Reports() {
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Inflow vs Outflow movement velocity</p>
         </button>
 
-        <button
-          type="button"
-          className={`card ${activeReport === 'user-activity' ? 'border-primary' : ''}`}
-          aria-pressed={activeReport === 'user-activity'}
-          style={{
-            cursor: 'pointer',
-            border: activeReport === 'user-activity' ? '2px solid var(--primary)' : '1px solid var(--border-color)',
-            background: activeReport === 'user-activity' ? 'var(--primary-light)' : 'var(--bg-card)',
-            textAlign: 'left'
-          }}
-          onClick={() => setActiveReport('user-activity')}
-        >
-          <Users size={20} color="#818cf8" style={{ marginBottom: '8px' }} />
-          <h4 style={{ fontSize: '0.95rem', fontWeight: 700 }}>User Activity Ledger</h4>
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Staff transactional volume & audit counts</p>
-        </button>
       </div>
 
       {/* Date Filter (for movement report) */}
       {activeReport === 'movement' && (
-        <div className="card" style={{ marginBottom: '20px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div className="card no-print" style={{ marginBottom: '20px', display: 'flex', gap: '10px', alignItems: 'center' }}>
           <Calendar size={16} color="var(--primary)" />
           <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Filter Movement Period:</span>
           <input
@@ -305,13 +271,14 @@ export function Reports() {
       )}
 
       {/* Report Table Display */}
+      <h2 className="report-print-title">{reportTitle}</h2>
       {loading ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-dim)' }}>
           <RefreshCw size={32} className="animate-spin" style={{ margin: '0 auto 12px' }} />
           Calculating metrics and compiling report...
         </div>
       ) : (
-        <div className="table-responsive">
+        <div className="table-responsive report-print-table">
           <table className="data-table">
             {activeReport === 'godown-wise' && (
               <>
@@ -398,34 +365,6 @@ export function Reports() {
               </>
             )}
 
-            {activeReport === 'user-activity' && (
-              <>
-                <thead>
-                  <tr>
-                    <th>Staff Name</th>
-                    <th>Username</th>
-                    <th>Role</th>
-                    <th>Stock Transactions Processed</th>
-                    <th>Audit Actions Logged</th>
-                    <th>Last Active Timestamp</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reportData.map((r, i) => (
-                    <tr key={i}>
-                      <td style={{ fontWeight: 700 }}>{r.name}</td>
-                      <td style={{ color: 'var(--text-muted)' }}>@{r.username}</td>
-                      <td><span className={`badge badge-role-${r.role}`}>{r.role.toUpperCase()}</span></td>
-                      <td style={{ fontSize: '1.05rem', fontWeight: 800 }}>{r.transactions_performed}</td>
-                      <td>{r.audit_actions_logged}</td>
-                      <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        {r.last_active_at ? new Date(r.last_active_at).toLocaleString() : 'N/A'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </>
-            )}
           </table>
         </div>
       )}

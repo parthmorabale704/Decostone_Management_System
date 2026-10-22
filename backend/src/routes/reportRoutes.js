@@ -12,6 +12,5 @@ router.get('/dashboard-summary', reportController.getDashboardSummary);
 router.get('/godown-wise', requireRole('admin', 'manager'), reportController.getGodownWiseReport);
 router.get('/category-wise', requireRole('admin', 'manager'), reportController.getCategoryWiseReport);
 router.get('/material-movement', requireRole('admin', 'manager'), reportController.getMaterialMovementReport);
-router.get('/user-activity', requireRole('admin'), reportController.getUserActivityReport);
 
 module.exports = router;

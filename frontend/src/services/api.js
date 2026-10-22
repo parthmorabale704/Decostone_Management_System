@@ -88,7 +88,6 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return request(`/reports/material-movement?${query}`);
   },
-  getUserActivityReport: () => request('/reports/user-activity'),
 
   // Users (Admin)
   getUsers: () => request('/users'),
