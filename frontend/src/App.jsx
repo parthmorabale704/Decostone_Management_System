@@ -47,7 +47,7 @@ export function App() {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedDetailMaterialId, setSelectedDetailMaterialId] = useState(null);
 
-  const loadGlobalData = async () => {
+  const loadGlobalData = useCallback(async () => {
     if (!token) return;
     try {
       const [gRes, mRes] = await Promise.all([
@@ -59,17 +59,13 @@ export function App() {
     } catch (err) {
       console.error('Failed to load global data:', err);
     }
-  };
-
-  useEffect(() => {
-    if (token) {
-      loadGlobalData();
-    }
   }, [token]);
 
-  useStockSync(() => {
+  useEffect(() => {
     loadGlobalData();
-  });
+  }, [loadGlobalData]);
+
+  useStockSync(loadGlobalData);
 
   const handleOpenTransactionModal = (type = 'STOCK_IN', materialId = null, godownId = null) => {
     setTransactionType(type);
@@ -159,7 +155,7 @@ export function App() {
           )}
 
           {activePage === 'categories' && (
-            <Categories onSelectCategory={handleSelectCategory} />
+            <Categories onSelectCategory={handleSelectCategory} onRefreshGlobalData={loadGlobalData} />
           )}
 
           {activePage === 'materials' && (
@@ -167,6 +163,8 @@ export function App() {
               selectedCategoryId={selectedCategoryId}
               onOpenTransactionModal={handleOpenTransactionModal}
               onSelectMaterial={handleOpenMaterialDetail}
+              onSelectPage={handleSelectPage}
+              onRefreshGlobalData={loadGlobalData}
             />
           )}
 
@@ -230,6 +228,10 @@ export function App() {
         initialGodownId={transactionGodownId}
         godowns={godowns}
         materials={materials}
+        onGoToMaterials={() => {
+          setTransactionModalOpen(false);
+          handleSelectPage('materials');
+        }}
         onSuccess={() => {
           loadGlobalData();
         }}

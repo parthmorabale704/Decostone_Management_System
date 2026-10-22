@@ -162,7 +162,7 @@ function createMaterial(req, res) {
     if (![purchasePrice, sellingPrice, minimumStock].every(Number.isFinite) || purchasePrice < 0 || sellingPrice < 0 || minimumStock < 0) {
       return res.status(400).json({ success: false, message: 'Prices and minimum stock level must be valid non-negative numbers.' });
     }
-    if (!Number.isInteger(Number(category_id)) || !db.prepare('SELECT 1 FROM categories WHERE id = ?').get(Number(category_id))) {
+    if (!Number.isInteger(Number(category_id)) || !db.prepare('SELECT 1 FROM categories WHERE id = ? AND is_deleted = 0').get(Number(category_id))) {
       return res.status(400).json({ success: false, message: 'The selected category does not exist.' });
     }
     if (!opening_stocks || typeof opening_stocks !== 'object' || Array.isArray(opening_stocks)) {
@@ -252,7 +252,7 @@ function updateMaterial(req, res) {
     if (![purchasePrice, sellingPrice, minimumStock].every(Number.isFinite) || purchasePrice < 0 || sellingPrice < 0 || minimumStock < 0) {
       return res.status(400).json({ success: false, message: 'Prices and minimum stock level must be valid non-negative numbers.' });
     }
-    if (!Number.isInteger(Number(category_id)) || !db.prepare('SELECT 1 FROM categories WHERE id = ?').get(Number(category_id))) {
+    if (!Number.isInteger(Number(category_id)) || !db.prepare('SELECT 1 FROM categories WHERE id = ? AND is_deleted = 0').get(Number(category_id))) {
       return res.status(400).json({ success: false, message: 'The selected category does not exist.' });
     }
 

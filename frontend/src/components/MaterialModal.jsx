@@ -99,7 +99,7 @@ export function MaterialModal({
         await api.createMaterial(formData);
         success(`Material "${formData.name}" created with initial warehouse stock.`);
       }
-      if (onSuccess) onSuccess();
+      if (onSuccess) await onSuccess();
       onClose();
     } catch (err) {
       error(err.message || 'Failed to save material.');

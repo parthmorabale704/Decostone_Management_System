@@ -307,14 +307,14 @@ export function Dashboard({ onOpenTransactionModal, onSelectMaterial, onSelectPa
             </button>
           </div>
 
-          <div className="table-responsive" style={{ maxHeight: '280px' }}>
-            <table className="data-table">
+          <div className="table-responsive dashboard-table-scroll" style={{ maxHeight: '280px' }}>
+            <table className="data-table dashboard-low-stock-table">
               <thead>
                 <tr>
                   <th>Material</th>
                   <th>Category</th>
-                  <th>Current Stock</th>
-                  <th>Min Level</th>
+                  <th>Stock</th>
+                  <th>Min</th>
                   <th>Action</th>
                 </tr>
               </thead>
@@ -373,8 +373,8 @@ export function Dashboard({ onOpenTransactionModal, onSelectMaterial, onSelectPa
             </button>
           </div>
 
-          <div className="table-responsive" style={{ maxHeight: '280px' }}>
-            <table className="data-table">
+          <div className="table-responsive dashboard-table-scroll" style={{ maxHeight: '280px' }}>
+            <table className="data-table dashboard-movement-table">
               <thead>
                 <tr>
                   <th>Time</th>

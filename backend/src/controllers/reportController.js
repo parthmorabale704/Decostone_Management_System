@@ -5,7 +5,7 @@ function getDashboardSummary(req, res) {
     const allGodowns = req.user.role === 'admin' || req.user.role === 'manager';
     const assignedGodownId = req.user.assigned_godown_id || -1;
     const totalMaterials = db.prepare('SELECT COUNT(*) as count FROM materials WHERE is_deleted = 0').get().count;
-    const totalCategories = db.prepare('SELECT COUNT(*) as count FROM categories').get().count;
+    const totalCategories = db.prepare('SELECT COUNT(*) as count FROM categories WHERE is_deleted = 0').get().count;
     const totalStock = db.prepare(`
       SELECT COALESCE(SUM(s.quantity), 0) as total_qty,
              COALESCE(SUM(s.quantity * m.purchase_price), 0) as total_value
@@ -61,6 +61,7 @@ function getDashboardSummary(req, res) {
       FROM categories c
       LEFT JOIN materials m ON m.category_id = c.id AND m.is_deleted = 0
       LEFT JOIN stock s ON s.material_id = m.id AND (? = 1 OR s.godown_id = ?)
+      WHERE c.is_deleted = 0
       GROUP BY c.id
       ORDER BY total_stock DESC
     `).all(allGodowns ? 1 : 0, assignedGodownId);
@@ -143,6 +144,7 @@ function getCategoryWiseReport(req, res) {
       FROM categories c
       LEFT JOIN materials m ON m.category_id = c.id AND m.is_deleted = 0
       LEFT JOIN stock s ON s.material_id = m.id
+      WHERE c.is_deleted = 0
       GROUP BY c.id
       ORDER BY total_quantity DESC
     `).all();

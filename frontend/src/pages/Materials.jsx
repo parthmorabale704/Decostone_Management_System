@@ -25,7 +25,9 @@ import {
 export function Materials({
   selectedCategoryId = null,
   onOpenTransactionModal,
-  onSelectMaterial
+  onSelectMaterial,
+  onSelectPage,
+  onRefreshGlobalData
 }) {
   const { user } = useAuth();
   const { success, error } = useNotification();
@@ -34,6 +36,7 @@ export function Materials({
   const [categories, setCategories] = useState([]);
   const [godowns, setGodowns] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   // Filters & Views
   const [viewMode, setViewMode] = useState('table'); // 'table' | 'grid'
@@ -63,8 +66,10 @@ export function Materials({
       if (matRes.success) setMaterials(matRes.materials || []);
       if (catRes.success) setCategories(catRes.categories || []);
       if (gdnRes.success) setGodowns(gdnRes.godowns || []);
+      setLoadError('');
     } catch (err) {
       console.error('Failed to load materials data:', err);
+      setLoadError(err.message || 'Could not load inventory data. Check the server connection and try again.');
     } finally {
       if (!silent) setLoading(false);
     }
@@ -95,7 +100,8 @@ export function Materials({
     try {
       await api.deleteMaterial(id);
       success(`Material "${name}" soft-deleted.`);
-      loadData();
+      await loadData(true);
+      await onRefreshGlobalData?.();
     } catch (err) {
       error(err.message || 'Failed to delete material.');
     }
@@ -152,15 +158,21 @@ export function Materials({
           </div>
 
           {(user?.role === 'admin' || user?.role === 'manager') && (
-            <button
-              className="btn btn-primary"
-              onClick={() => {
-                setEditingMaterial(null);
-                setMaterialModalOpen(true);
-              }}
-            >
-              <Plus size={16} /> Add Material
-            </button>
+            categories.length === 0 ? (
+              <button className="btn btn-primary" onClick={() => onSelectPage?.('categories')}>
+                <Plus size={16} /> Create a Category First
+              </button>
+            ) : (
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  setEditingMaterial(null);
+                  setMaterialModalOpen(true);
+                }}
+              >
+                <Plus size={16} /> Add Material
+              </button>
+            )
           )}
         </div>
       </div>
@@ -266,24 +278,52 @@ export function Materials({
           <RefreshCw size={32} className="animate-spin" style={{ margin: '0 auto 12px' }} />
           Loading materials database...
         </div>
+      ) : loadError ? (
+        <div className="card" role="alert" style={{ textAlign: 'center', padding: '36px 20px' }}>
+          <p style={{ color: 'var(--danger, #b42336)', marginBottom: '16px' }}>{loadError}</p>
+          <button type="button" className="btn btn-secondary" onClick={() => loadData()}>
+            <RefreshCw size={16} /> Retry
+          </button>
+        </div>
       ) : materials.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-dim)' }}>
           <Boxes size={48} color="var(--primary)" opacity={0.4} style={{ margin: '0 auto 16px' }} />
           <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '6px' }}>
-            No materials found
+            {categories.length === 0 ? 'Create a category to get started' : 'No materials found'}
           </h3>
           <p style={{ fontSize: '0.88rem', marginBottom: '20px' }}>
-            No products match the selected filters or search terms.
+            {categories.length === 0
+              ? 'Materials must belong to a category. Create one, then return here to add materials and opening stock.'
+              : materials.length === 0 && (search || categoryId || statusFilter || brandFilter)
+                ? 'No products match the selected filters or search terms.'
+                : 'There are no materials yet. Add a material to begin tracking warehouse stock.'}
           </p>
           {(user?.role === 'admin' || user?.role === 'manager') && (
-            <button
-              className="btn btn-primary"
-              onClick={() => {
-                setEditingMaterial(null);
-                setMaterialModalOpen(true);
-              }}
-            >
-              <Plus size={16} /> Add First Material
+            categories.length === 0 ? (
+              <button type="button" className="btn btn-primary" onClick={() => onSelectPage?.('categories')}>
+                <Plus size={16} /> Create Category
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setEditingMaterial(null);
+                  setMaterialModalOpen(true);
+                }}
+              >
+                <Plus size={16} /> Add First Material
+              </button>
+            )
+          )}
+          {categories.length > 0 && (search || categoryId || statusFilter || brandFilter) && (
+            <button type="button" className="btn btn-secondary" style={{ marginLeft: '8px' }} onClick={() => {
+              setSearch('');
+              setCategoryId('');
+              setStatusFilter('');
+              setBrandFilter('');
+            }}>
+              Clear filters
             </button>
           )}
         </div>
@@ -547,7 +587,10 @@ export function Materials({
         material={editingMaterial}
         categories={categories}
         godowns={godowns}
-        onSuccess={loadData}
+        onSuccess={async () => {
+          await loadData(true);
+          await onRefreshGlobalData?.();
+        }}
       />
     </div>
   );

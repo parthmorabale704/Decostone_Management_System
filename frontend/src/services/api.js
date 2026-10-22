@@ -49,8 +49,10 @@ export const api = {
   // Categories
   getCategories: () => request('/categories'),
   createCategory: (data) => request('/categories', { method: 'POST', body: JSON.stringify(data) }),
+  createCategoriesBulk: (names) => request('/categories/bulk', { method: 'POST', body: JSON.stringify({ names }) }),
   updateCategory: (id, data) => request(`/categories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  deleteCategory: (id) => request(`/categories/${id}`, { method: 'DELETE' }),
+  deleteCategory: (id, data = {}) => request(`/categories/${id}`, { method: 'DELETE', body: JSON.stringify(data) }),
+  replaceAllCategories: (data) => request('/categories', { method: 'DELETE', body: JSON.stringify(data) }),
 
   // Materials
   getMaterials: (params = {}) => {

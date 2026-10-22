@@ -47,39 +47,59 @@ function seed() {
   }
 
   const salt = bcrypt.genSaltSync(10);
-  const adminPassword = bcrypt.hashSync('admin123', salt);
-  const managerPassword = bcrypt.hashSync('manager123', salt);
-  const supervisorPassword = bcrypt.hashSync('supervisor123', salt);
 
-  const insertGodown = db.prepare(`
-    INSERT INTO godowns (name, code, location, description) VALUES (?, ?, ?, ?)
-  `);
+  // Demo data is represented as objects. Keys link seed records without relying
+  // on generated database IDs or on the order in which records are inserted.
+  const godownData = [
+    { key: 'g1', name: 'Godown 1', code: 'GDN-01', location: 'North Industrial Zone, Warehouse A', description: 'Primary central distribution warehouse' },
+    { key: 'g2', name: 'Godown 2', code: 'GDN-02', location: 'South Port Logistics Hub', description: 'Import and bulk material storage' },
+    { key: 'g3', name: 'Godown 3', code: 'GDN-03', location: 'East City Depot, Sector 4', description: 'Retail supply and express fulfillment' },
+    { key: 'g4', name: 'Godown 4', code: 'GDN-04', location: 'West Highway Complex, Bay 7', description: 'Overflow and heavy granite/marble yard' }
+  ];
+  const insertGodown = db.prepare('INSERT INTO godowns (name, code, location, description) VALUES (?, ?, ?, ?)');
+  const godownIds = Object.fromEntries(godownData.map(godown => [
+    godown.key,
+    Number(insertGodown.run(godown.name, godown.code, godown.location, godown.description).lastInsertRowid)
+  ]));
+  const g1 = godownIds.g1;
+  const g3 = godownIds.g3;
 
-  const g1 = insertGodown.run('Godown 1', 'GDN-01', 'North Industrial Zone, Warehouse A', 'Primary central distribution warehouse').lastInsertRowid;
-  const g2 = insertGodown.run('Godown 2', 'GDN-02', 'South Port Logistics Hub', 'Import and bulk material storage').lastInsertRowid;
-  const g3 = insertGodown.run('Godown 3', 'GDN-03', 'East City Depot, Sector 4', 'Retail supply and express fulfillment').lastInsertRowid;
-  const g4 = insertGodown.run('Godown 4', 'GDN-04', 'West Highway Complex, Bay 7', 'Overflow and heavy granite/marble yard').lastInsertRowid;
-
+  const userData = [
+    { key: 'admin', name: 'Admin Owner', username: 'admin', email: 'admin@decostone.com', mobile: '+91 9876543210', password: 'admin123', role: 'admin', permissions: { can_stock_in: 1, can_stock_out: 1, can_adjust: 1 } },
+    { key: 'manager', name: 'Operations Manager', username: 'manager', email: 'manager@decostone.com', mobile: '+91 9876543211', password: 'manager123', role: 'manager', permissions: { can_stock_in: 1, can_stock_out: 1, can_adjust: 1 } },
+    { key: 'supervisor', name: 'Godown Supervisor', username: 'supervisor', email: 'supervisor@decostone.com', mobile: '+91 9876543214', password: 'supervisor123', role: 'supervisor', assigned_godown_key: 'g1', permissions: { can_stock_in: 1, can_stock_out: 1, can_adjust: 0 } },
+    { key: 'supervisor1', name: 'Supervisor G1', username: 'supervisor1', email: 'sup1@decostone.com', mobile: '+91 9876543212', password: 'supervisor123', role: 'supervisor', assigned_godown_key: 'g1', permissions: { can_stock_in: 1, can_stock_out: 1, can_adjust: 0 } },
+    { key: 'supervisor2', name: 'Supervisor G2', username: 'supervisor2', email: 'sup2@decostone.com', mobile: '+91 9876543213', password: 'supervisor123', role: 'supervisor', assigned_godown_key: 'g2', permissions: { can_stock_in: 1, can_stock_out: 1, can_adjust: 0 } }
+  ];
   const insertUser = db.prepare(`
     INSERT INTO users (name, username, email, mobile, password_hash, role, assigned_godown_id, can_stock_in, can_stock_out, can_adjust, is_active)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
   `);
+  const userIds = Object.fromEntries(userData.map(user => {
+    const passwordHash = bcrypt.hashSync(user.password, salt);
+    const permissions = user.permissions;
+    const result = insertUser.run(
+      user.name, user.username, user.email, user.mobile, passwordHash, user.role,
+      user.assigned_godown_key ? godownIds[user.assigned_godown_key] : null,
+      permissions.can_stock_in, permissions.can_stock_out, permissions.can_adjust
+    );
+    return [user.key, Number(result.lastInsertRowid)];
+  }));
+  const uAdmin = userIds.admin;
+  const uManager = userIds.manager;
+  const uSup1 = userIds.supervisor1;
 
-  const uAdmin = insertUser.run('Admin Owner', 'admin', 'admin@decostone.com', '+91 9876543210', adminPassword, 'admin', null, 1, 1, 1, 1).lastInsertRowid;
-  const uManager = insertUser.run('Operations Manager', 'manager', 'manager@decostone.com', '+91 9876543211', managerPassword, 'manager', null, 1, 1, 1, 1).lastInsertRowid;
-  const uSup = insertUser.run('Godown Supervisor', 'supervisor', 'supervisor@decostone.com', '+91 9876543214', supervisorPassword, 'supervisor', g1, 1, 1, 0, 1).lastInsertRowid;
-  const uSup1 = insertUser.run('Supervisor G1', 'supervisor1', 'sup1@decostone.com', '+91 9876543212', supervisorPassword, 'supervisor', g1, 1, 1, 0, 1).lastInsertRowid;
-  const uSup2 = insertUser.run('Supervisor G2', 'supervisor2', 'sup2@decostone.com', '+91 9876543213', supervisorPassword, 'supervisor', g2, 1, 1, 0, 1).lastInsertRowid;
-
-  const insertCategory = db.prepare(`
-    INSERT INTO categories (name, description, image_url) VALUES (?, ?, ?)
-  `);
-
-  const catTiles = insertCategory.run('Tiles', 'Glazed vitrified, porcelain, ceramic wall & floor tiles', 'https://images.unsplash.com/photo-1599619351208-3e6c839d6828?w=500&auto=format&fit=crop&q=60').lastInsertRowid;
-  const catMarble = insertCategory.run('Marble & Granite', 'Imported Italian marble, premium granite slabs and quartz', 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=500&auto=format&fit=crop&q=60').lastInsertRowid;
-  const catBath = insertCategory.run('Bathroom Ware', 'Designer wash basins, brass faucets, rain shower systems', 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=500&auto=format&fit=crop&q=60').lastInsertRowid;
-  const catSink = insertCategory.run('Kitchen Sinks', 'Quartz composite, handmade SS-304 single and double bowl sinks', 'https://images.unsplash.com/photo-1590490360182-c33d57733427?w=500&auto=format&fit=crop&q=60').lastInsertRowid;
-  const catSanitary = insertCategory.run('Sanitary Ware', 'Rimless wall hung commodes, concealed flush tanks, urinals', 'https://images.unsplash.com/photo-1585058177579-24751433eb0c?w=500&auto=format&fit=crop&q=60').lastInsertRowid;
+  const categoryData = [
+    { key: 'tiles', name: 'Tiles', description: 'Glazed vitrified, porcelain, ceramic wall & floor tiles', image_url: 'https://images.unsplash.com/photo-1599619351208-3e6c839d6828?w=500&auto=format&fit=crop&q=60' },
+    { key: 'marble', name: 'Marble & Granite', description: 'Imported Italian marble, premium granite slabs and quartz', image_url: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=500&auto=format&fit=crop&q=60' },
+    { key: 'bathroom', name: 'Bathroom Ware', description: 'Designer wash basins, brass faucets, rain shower systems', image_url: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=500&auto=format&fit=crop&q=60' },
+    { key: 'sinks', name: 'Kitchen Sinks', description: 'Quartz composite, handmade SS-304 single and double bowl sinks', image_url: 'https://images.unsplash.com/photo-1590490360182-c33d57733427?w=500&auto=format&fit=crop&q=60' }
+  ];
+  const insertCategory = db.prepare('INSERT INTO categories (name, description, image_url) VALUES (?, ?, ?)');
+  const categoryIds = Object.fromEntries(categoryData.map(category => [
+    category.key,
+    Number(insertCategory.run(category.name, category.description, category.image_url).lastInsertRowid)
+  ]));
 
   const insertMaterial = db.prepare(`
     INSERT INTO materials (sku, name, category_id, brand, description, size, color, unit, purchase_price, selling_price, min_stock_level, image_url)
@@ -99,7 +119,7 @@ function seed() {
     {
       sku: 'TIL-001',
       name: 'Royal White Glossy Tile',
-      category_id: catTiles,
+      category_key: 'tiles',
       brand: 'DecoStone Elite',
       description: 'High gloss nano-polished vitrified tile with micro-crystalline coating',
       size: '600x600 mm',
@@ -109,12 +129,12 @@ function seed() {
       selling_price: 680,
       min_stock_level: 40,
       image_url: 'https://images.unsplash.com/photo-1599619351208-3e6c839d6828?w=500&auto=format&fit=crop&q=60',
-      stocks: [100, 50, 75, 25] // G1, G2, G3, G4
+      stocks: { g1: 100, g2: 50, g3: 75, g4: 25 }
     },
     {
       sku: 'MAR-001',
       name: 'Statuario Italian Marble Slab',
-      category_id: catMarble,
+      category_key: 'marble',
       brand: 'Carrara Pure',
       description: 'First choice Italian Statuario marble with dramatic grey veining',
       size: '8x4 ft (18mm)',
@@ -124,12 +144,12 @@ function seed() {
       selling_price: 950,
       min_stock_level: 150,
       image_url: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=500&auto=format&fit=crop&q=60',
-      stocks: [400, 300, 200, 150]
+      stocks: { g1: 400, g2: 300, g3: 200, g4: 150 }
     },
     {
       sku: 'GRA-001',
       name: 'Midnight Black Galaxy Granite',
-      category_id: catMarble,
+      category_key: 'marble',
       brand: 'DecoStone Classic',
       description: 'Heavy duty polished black granite with subtle copper/golden specks',
       size: '10x3 ft (20mm)',
@@ -139,12 +159,12 @@ function seed() {
       selling_price: 260,
       min_stock_level: 100,
       image_url: 'https://images.unsplash.com/photo-1590490360182-c33d57733427?w=500&auto=format&fit=crop&q=60',
-      stocks: [200, 120, 90, 40]
+      stocks: { g1: 200, g2: 120, g3: 90, g4: 40 }
     },
     {
       sku: 'SAN-001',
       name: 'AquaWave Cascade Ceramic Basin',
-      category_id: catBath,
+      category_key: 'bathroom',
       brand: 'DecoVogue',
       description: 'Countertop tabletop oval wash basin with anti-bacterial glaze',
       size: '450x350x120 mm',
@@ -154,12 +174,12 @@ function seed() {
       selling_price: 2250,
       min_stock_level: 20,
       image_url: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=500&auto=format&fit=crop&q=60',
-      stocks: [35, 20, 15, 8]
+      stocks: { g1: 35, g2: 20, g3: 15, g4: 8 }
     },
     {
       sku: 'KSK-001',
       name: 'Nero Dual Bowl Quartz Kitchen Sink',
-      category_id: catSink,
+      category_key: 'sinks',
       brand: 'DecoStone QuartzCraft',
       description: '80% granite composite sink with scratch and heat resistance up to 280°C',
       size: '36x18x9 inch',
@@ -169,12 +189,12 @@ function seed() {
       selling_price: 6500,
       min_stock_level: 15,
       image_url: 'https://images.unsplash.com/photo-1585058177579-24751433eb0c?w=500&auto=format&fit=crop&q=60',
-      stocks: [25, 18, 12, 5]
+      stocks: { g1: 25, g2: 18, g3: 12, g4: 5 }
     },
     {
       sku: 'TIL-002',
       name: 'Calacatta Gold Porcelain Large Slab',
-      category_id: catTiles,
+      category_key: 'tiles',
       brand: 'DecoStone Luxe',
       description: 'Continuous vein book-matched large format porcelain slab for feature walls',
       size: '1200x600 mm',
@@ -184,27 +204,12 @@ function seed() {
       selling_price: 1350,
       min_stock_level: 30,
       image_url: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=500&auto=format&fit=crop&q=60',
-      stocks: [80, 40, 20, 10]
-    },
-    {
-      sku: 'SAN-002',
-      name: 'Wall-Hung Rimless Smart Commode',
-      category_id: catSanitary,
-      brand: 'DecoSan Luxe',
-      description: 'Tornado flush ceramic closet with soft-close UF slim seat cover',
-      size: '520x360x360 mm',
-      color: 'Gloss White',
-      unit: 'Piece',
-      purchase_price: 4800,
-      selling_price: 7400,
-      min_stock_level: 15,
-      image_url: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=500&auto=format&fit=crop&q=60',
-      stocks: [18, 14, 6, 4]
+      stocks: { g1: 80, g2: 40, g3: 20, g4: 10 }
     },
     {
       sku: 'SAN-003',
       name: 'Brushed Gold Tall Basin Mixer Tap',
-      category_id: catBath,
+      category_key: 'bathroom',
       brand: 'DecoBrass',
       description: 'Solid brass body with electroplated brushed gold finish & ceramic cartridge',
       size: 'Height 300 mm',
@@ -214,21 +219,23 @@ function seed() {
       selling_price: 2700,
       min_stock_level: 20,
       image_url: 'https://images.unsplash.com/photo-1599619351208-3e6c839d6828?w=500&auto=format&fit=crop&q=60',
-      stocks: [8, 5, 4, 2] // Low stock alert! (Total 19, individual godowns low)
+      stocks: { g1: 8, g2: 5, g3: 4, g4: 2 } // Low stock alert! (Total 19, individual godowns low)
     }
   ];
 
-  const godownIds = [g1, g2, g3, g4];
+  const materialIds = {};
 
   materialsData.forEach((m, idx) => {
     const matId = insertMaterial.run(
-      m.sku, m.name, m.category_id, m.brand, m.description,
+      m.sku, m.name, categoryIds[m.category_key], m.brand, m.description,
       m.size, m.color, m.unit, m.purchase_price, m.selling_price,
       m.min_stock_level, m.image_url
     ).lastInsertRowid;
+    materialIds[m.sku] = Number(matId);
 
-    godownIds.forEach((gId, gIdx) => {
-      const qty = m.stocks[gIdx];
+    godownData.forEach((godown, gIdx) => {
+      const gId = godownIds[godown.key];
+      const qty = Number(m.stocks[godown.key] || 0);
       insertStock.run(gId, matId, qty);
 
       insertTxn.run(
@@ -253,19 +260,30 @@ function seed() {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  insertTransfer.run('TRF-2026-0001', g1, g3, 1, 20, 'Depot stock replenishment for retail order', 'COMPLETED', uManager);
-  insertTxn.run('TXN-TRF-001A', 'TRANSFER_OUT', g1, 1, 20, 100, 80, uManager, 'TRF-2026-0001', null, 'Transfer to Godown 3');
-  insertTxn.run('TXN-TRF-001B', 'TRANSFER_IN', g3, 1, 20, 75, 95, uManager, 'TRF-2026-0001', null, 'Transfer from Godown 1');
-  db.prepare('UPDATE stock SET quantity = 80 WHERE godown_id = ? AND material_id = ?').run(g1, 1);
-  db.prepare('UPDATE stock SET quantity = 95 WHERE godown_id = ? AND material_id = ?').run(g3, 1);
+  const tileId = materialIds['TIL-001'];
+  const marbleId = materialIds['MAR-001'];
+  const transferQuantity = 20;
+  const getStock = db.prepare('SELECT quantity FROM stock WHERE godown_id = ? AND material_id = ?');
+  const updateStock = db.prepare('UPDATE stock SET quantity = ? WHERE godown_id = ? AND material_id = ?');
+  const tileG1BeforeTransfer = getStock.get(g1, tileId).quantity;
+  const tileG3BeforeTransfer = getStock.get(g3, tileId).quantity;
+  insertTransfer.run('TRF-2026-0001', g1, g3, tileId, transferQuantity, 'Depot stock replenishment for retail order', 'COMPLETED', uManager);
+  insertTxn.run('TXN-TRF-001A', 'TRANSFER_OUT', g1, tileId, transferQuantity, tileG1BeforeTransfer, tileG1BeforeTransfer - transferQuantity, uManager, 'TRF-2026-0001', null, 'Transfer to Godown 3');
+  insertTxn.run('TXN-TRF-001B', 'TRANSFER_IN', g3, tileId, transferQuantity, tileG3BeforeTransfer, tileG3BeforeTransfer + transferQuantity, uManager, 'TRF-2026-0001', null, 'Transfer from Godown 1');
+  updateStock.run(tileG1BeforeTransfer - transferQuantity, g1, tileId);
+  updateStock.run(tileG3BeforeTransfer + transferQuantity, g3, tileId);
 
   // Insert sample Stock IN
-  insertTxn.run('TXN-IN-001', 'STOCK_IN', g1, 2, 50, 400, 450, uAdmin, 'PO-2026-889', 'Carrara Mines Italy', 'New container consignment arrived');
-  db.prepare('UPDATE stock SET quantity = quantity + 50 WHERE godown_id = ? AND material_id = ?').run(g1, 2);
+  const receiptQuantity = 50;
+  const marbleG1BeforeReceipt = getStock.get(g1, marbleId).quantity;
+  insertTxn.run('TXN-IN-001', 'STOCK_IN', g1, marbleId, receiptQuantity, marbleG1BeforeReceipt, marbleG1BeforeReceipt + receiptQuantity, uAdmin, 'PO-2026-889', 'Carrara Mines Italy', 'New container consignment arrived');
+  updateStock.run(marbleG1BeforeReceipt + receiptQuantity, g1, marbleId);
 
   // Insert sample Stock OUT
-  insertTxn.run('TXN-OUT-001', 'STOCK_OUT', g3, 1, 10, 95, 85, uSup1, 'INV-2026-1044', 'Horizon Luxury Villas', 'Customer order dispatch');
-  db.prepare('UPDATE stock SET quantity = 85 WHERE godown_id = ? AND material_id = ?').run(g3, 1);
+  const dispatchQuantity = 10;
+  const tileG3BeforeDispatch = getStock.get(g3, tileId).quantity;
+  insertTxn.run('TXN-OUT-001', 'STOCK_OUT', g3, tileId, dispatchQuantity, tileG3BeforeDispatch, tileG3BeforeDispatch - dispatchQuantity, uSup1, 'INV-2026-1044', 'Horizon Luxury Villas', 'Customer order dispatch');
+  updateStock.run(tileG3BeforeDispatch - dispatchQuantity, g3, tileId);
 
   // Insert audit logs
   const insertAudit = db.prepare(`

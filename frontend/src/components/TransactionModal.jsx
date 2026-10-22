@@ -22,6 +22,7 @@ export function TransactionModal({
   initialGodownId = null,
   godowns = [],
   materials = [],
+  onGoToMaterials,
   onSuccess
 }) {
   const { user } = useAuth();
@@ -282,6 +283,16 @@ export function TransactionModal({
                 ))}
               </select>
             </div>
+            {materials.length === 0 && (
+              <div className="notice notice-warning" role="note">
+                Create a category and material before recording stock.
+                {onGoToMaterials && (
+                  <button type="button" className="btn btn-sm btn-secondary" style={{ marginLeft: '10px' }} onClick={onGoToMaterials}>
+                    Go to materials
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Warehouse Selectors */}
             {type === 'TRANSFER' ? (
@@ -512,6 +523,7 @@ export function TransactionModal({
               }`}
               disabled={
                 submitting ||
+                materials.length === 0 ||
                 (type === 'STOCK_OUT' && quantity && Number(quantity) > currentStock) ||
                 (type === 'TRANSFER' && quantity && Number(quantity) > currentStock)
               }

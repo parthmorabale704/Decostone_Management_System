@@ -4,21 +4,43 @@ import { useTheme } from '../context/ThemeContext';
 import { api } from '../services/api';
 import {
   Bell, Sun, Moon, Plus, ArrowDownToLine, ArrowUpFromLine,
-  ArrowLeftRight, SlidersHorizontal, UserRound, LogOut, TriangleAlert, Menu, ChevronDown
+  ArrowLeftRight, SlidersHorizontal, UserRound, LogOut, TriangleAlert, Menu, ChevronDown, CheckCheck
 } from 'lucide-react';
 
 export function Navbar({ onOpenTransactionModal, onSelectPage, onMenuClick }) {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [lowStockItems, setLowStockItems] = useState([]);
+  const [hasLoadedNotifications, setHasLoadedNotifications] = useState(false);
+  const notificationStorageKey = `decostone_read_low_stock_${user?.id || user?.username || 'user'}`;
+  const [readNotificationIds, setReadNotificationIds] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(notificationStorageKey) || '[]');
+    } catch {
+      return [];
+    }
+  });
   const [openMenu, setOpenMenu] = useState(null);
+
+  const unreadCount = lowStockItems.filter((item) => (
+    !readNotificationIds.includes(`${item.godown_id}-${item.material_id}`)
+  )).length;
+
+  const markAllNotificationsRead = () => {
+    const ids = lowStockItems.map((item) => `${item.godown_id}-${item.material_id}`);
+    setReadNotificationIds(ids);
+    localStorage.setItem(notificationStorageKey, JSON.stringify(ids));
+  };
 
   useEffect(() => {
     let isMounted = true;
     const fetchLowStock = async () => {
       try {
         const response = await api.getLowStock();
-        if (isMounted && response.success) setLowStockItems(response.lowStockItems || []);
+        if (isMounted && response.success) {
+          setLowStockItems(response.lowStockItems || []);
+          setHasLoadedNotifications(true);
+        }
       } catch {
         // Keep the header usable when notifications are temporarily unavailable.
       }
@@ -30,6 +52,26 @@ export function Navbar({ onOpenTransactionModal, onSelectPage, onMenuClick }) {
       window.clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    try {
+      setReadNotificationIds(JSON.parse(localStorage.getItem(notificationStorageKey) || '[]'));
+    } catch {
+      setReadNotificationIds([]);
+    }
+  }, [notificationStorageKey]);
+
+  useEffect(() => {
+    if (!hasLoadedNotifications) return;
+    const activeIds = new Set(lowStockItems.map((item) => `${item.godown_id}-${item.material_id}`));
+    setReadNotificationIds((current) => {
+      const next = current.filter((id) => activeIds.has(id));
+      if (next.length !== current.length) {
+        localStorage.setItem(notificationStorageKey, JSON.stringify(next));
+      }
+      return next;
+    });
+  }, [hasLoadedNotifications, lowStockItems, notificationStorageKey]);
 
   useEffect(() => {
     if (!openMenu) return undefined;
@@ -91,18 +133,18 @@ export function Navbar({ onOpenTransactionModal, onSelectPage, onMenuClick }) {
             type="button"
             className="btn-icon header-icon-button notification-trigger"
             onClick={() => setOpenMenu(openMenu === 'notifications' ? null : 'notifications')}
-            aria-label={`Low stock notifications${lowStockItems.length ? `, ${lowStockItems.length} items` : ''}`}
+            aria-label={`Low stock notifications${unreadCount ? `, ${unreadCount} unread` : ''}`}
             aria-expanded={openMenu === 'notifications'}
             aria-haspopup="dialog"
           >
             <Bell size={19} aria-hidden="true" />
-            {lowStockItems.length > 0 && <span className="notification-count">{lowStockItems.length > 99 ? '99+' : lowStockItems.length}</span>}
+            {unreadCount > 0 && <span className="notification-count">{unreadCount > 99 ? '99+' : unreadCount}</span>}
           </button>
           {openMenu === 'notifications' && (
             <section className="header-popover notification-popover" role="dialog" aria-label="Low stock notifications">
               <div className="popover-heading">
                 <div><TriangleAlert size={17} /><strong>Low stock</strong></div>
-                <span className="text-muted">{lowStockItems.length} items</span>
+                <span className="text-muted">{unreadCount} unread</span>
               </div>
               {lowStockItems.length === 0 ? (
                 <p className="popover-empty">No materials are below their minimum stock level.</p>
@@ -111,10 +153,21 @@ export function Navbar({ onOpenTransactionModal, onSelectPage, onMenuClick }) {
                   {lowStockItems.slice(0, 6).map((item) => (
                     <div className="notification-item" key={`${item.godown_id}-${item.material_id}`}>
                       <strong>{item.material_name}</strong>
-                      <span>{item.godown_name} · {item.current_stock} / {item.min_stock_level} {item.unit}</span>
+                      <span>{item.godown_name} · {item.current_stock} / {item.min_stock_level} {item.unit} · {readNotificationIds.includes(`${item.godown_id}-${item.material_id}`) ? 'Read' : 'Unread'}</span>
                     </div>
                   ))}
                 </div>
+              )}
+              {lowStockItems.length > 0 && (
+                <button
+                  type="button"
+                  className="notification-read-all"
+                  onClick={markAllNotificationsRead}
+                  disabled={unreadCount === 0}
+                >
+                  <CheckCheck size={16} aria-hidden="true" />
+                  {unreadCount === 0 ? 'All notifications read' : 'Mark all as read'}
+                </button>
               )}
               <button
                 type="button"

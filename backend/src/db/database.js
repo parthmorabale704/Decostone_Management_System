@@ -226,6 +226,7 @@ function ensureColumn(table, column, definition) {
 
 // Additive migrations remain safe for databases created by earlier app versions.
 ensureColumn('materials', 'barcode', 'TEXT');
+ensureColumn('categories', 'is_deleted', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('inventory_order_lines', 'shade_code', 'TEXT');
 ensureColumn('inventory_order_lines', 'caliber', 'TEXT');
 ensureColumn('notification_outbox', 'dedupe_key', 'TEXT');

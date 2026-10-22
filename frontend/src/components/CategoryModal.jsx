@@ -36,7 +36,7 @@ export function CategoryModal({ isOpen, onClose, category = null, onSuccess }) {
         await api.createCategory({ name, description, image_url: imageUrl });
         success(`Category "${name}" created successfully.`);
       }
-      if (onSuccess) onSuccess();
+      if (onSuccess) await onSuccess();
       onClose();
     } catch (err) {
       error(err.message || 'Failed to save category.');

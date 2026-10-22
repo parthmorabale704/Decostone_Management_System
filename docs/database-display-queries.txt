@@ -76,7 +76,12 @@ SELECT
   COUNT(CASE WHEN transaction_type = 'STOCK_IN' THEN 1 END) AS stock_in_count,
   COALESCE(SUM(CASE WHEN transaction_type = 'STOCK_OUT' THEN quantity ELSE 0 END), 0) AS stock_out_qty,
   COUNT(CASE WHEN transaction_type = 'STOCK_OUT' THEN 1 END) AS stock_out_count,
-  COALESCE(SUM(CASE WHEN transaction_type IN ('TRANSFER_IN','TRANSFER_OUT') THEN quantity ELSE 0 END), 0) AS transfer_qty
+  -- Each transfer creates an OUT and an IN ledger row. For a company-wide
+  -- total, count only TRANSFER_IN so the same moved quantity is counted once.
+  COALESCE(SUM(CASE
+    WHEN transaction_type = 'TRANSFER_IN'
+      OR (:godown_id IS NOT NULL AND transaction_type = 'TRANSFER_OUT')
+    THEN quantity ELSE 0 END), 0) AS transfer_qty
 FROM stock_transactions
 WHERE DATE(created_at) = DATE('now','localtime')
   AND (:godown_id IS NULL OR godown_id = :godown_id);
@@ -104,7 +109,11 @@ GROUP BY c.id ORDER BY total_units DESC;
 SELECT DATE(created_at) AS movement_date,
        SUM(CASE WHEN transaction_type = 'STOCK_IN' THEN quantity ELSE 0 END) AS stock_in,
        SUM(CASE WHEN transaction_type = 'STOCK_OUT' THEN quantity ELSE 0 END) AS stock_out,
-       SUM(CASE WHEN transaction_type IN ('TRANSFER_IN','TRANSFER_OUT') THEN quantity ELSE 0 END) AS transfer_qty
+       -- Count each company-wide transfer once (its destination/IN row).
+       SUM(CASE
+         WHEN transaction_type = 'TRANSFER_IN'
+           OR (:godown_id IS NOT NULL AND transaction_type = 'TRANSFER_OUT')
+         THEN quantity ELSE 0 END) AS transfer_qty
 FROM stock_transactions
 WHERE created_at >= DATE('now','-30 days')
   AND (:godown_id IS NULL OR godown_id = :godown_id)
@@ -175,8 +184,9 @@ FROM material_images WHERE material_id = :material_id ORDER BY is_primary DESC, 
 6. CURRENT STOCK / INVENTORY BALANCES
 -------------------------------------
 -- All material balances per warehouse
+-- SQLite CURRENT_TIMESTAMP is stored in UTC; convert it for local display.
 SELECT g.name AS godown, m.sku, m.name AS material, c.name AS category,
-       s.quantity, m.unit, s.updated_at
+       s.quantity, m.unit, datetime(s.updated_at, 'localtime') AS updated_at
 FROM stock s
 JOIN godowns g ON g.id = s.godown_id
 JOIN materials m ON m.id = s.material_id
