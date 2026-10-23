@@ -1,0 +1,454 @@
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="decostone.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="structure query browser pragmas" current="1"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="3934"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/></tab_structure><tab_browse><table title="audit_logs" custom_title="0" dock_id="1" table="4,10:mainaudit_logs"/><dock_state state="000000ff00000000fd00000001000000020000000000000000fc0100000001fb000000160064006f0063006b00420072006f00770073006500310100000000ffffffff0000011300ffffff000000000000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings/></tab_browse><tab_sql><sql name="SQL 1*">DECOSTONE MMS — READ-ONLY SQL DATA DISPLAY QUERIES
+================================================
+
+Purpose
+-------
+This file contains SQLite SELECT queries for viewing the main data shown by the
+application: dashboard, inventory, warehouses, operations, reports, users, and
+audit history. These queries do not insert, update, or delete data.
+
+Database
+--------
+Default file: backend/data/decostone.db
+The backend can use DATABASE_PATH or DATA_DIR environment variables to select a
+custom location. Open the database actually used by the running backend.
+
+How to use
+----------
+Run a query in DB Browser for SQLite (Execute SQL) or sqlite3. Replace each
+named parameter such as :godown_id with a value. Examples: :godown_id = 1,
+:material_id = 3, :start_date = '2026-01-01', :end_date = '2026-12-31'.
+To show all godowns in queries with optional warehouse filtering, leave
+:godown_id as NULL. Queries are global inspection queries; the application
+also enforces role and warehouse permissions in its API. Do not use these
+queries to bypass the app's access controls.
+
+1. DATABASE OVERVIEW / HEALTH
+-----------------------------
+-- Tables in this database
+SELECT name
+FROM sqlite_master
+WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+ORDER BY name;
+
+-- Database file path
+PRAGMA database_list;
+
+-- Integrity check (expected: 'ok')
+PRAGMA integrity_check;
+
+-- Foreign-key violations (expected: no rows)
+PRAGMA foreign_key_check;
+
+-- Row counts for core business tables
+SELECT 'users' AS table_name, COUNT(*) AS row_count FROM users
+UNION ALL SELECT 'godowns', COUNT(*) FROM godowns
+UNION ALL SELECT 'categories', COUNT(*) FROM categories
+UNION ALL SELECT 'materials', COUNT(*) FROM materials
+UNION ALL SELECT 'stock', COUNT(*) FROM stock
+UNION ALL SELECT 'stock_transactions', COUNT(*) FROM stock_transactions
+UNION ALL SELECT 'stock_transfers', COUNT(*) FROM stock_transfers
+UNION ALL SELECT 'stock_adjustments', COUNT(*) FROM stock_adjustments
+UNION ALL SELECT 'suppliers', COUNT(*) FROM suppliers
+UNION ALL SELECT 'customers', COUNT(*) FROM customers
+UNION ALL SELECT 'inventory_orders', COUNT(*) FROM inventory_orders
+UNION ALL SELECT 'stock_lots', COUNT(*) FROM stock_lots
+UNION ALL SELECT 'count_sessions', COUNT(*) FROM count_sessions
+UNION ALL SELECT 'audit_logs', COUNT(*) FROM audit_logs
+ORDER BY table_name;
+
+2. DASHBOARD SUMMARY / KPI CARDS
+--------------------------------
+-- Material and category counts, stock units and inventory valuation
+SELECT
+  (SELECT COUNT(*) FROM materials WHERE is_deleted = 0) AS active_materials,
+  (SELECT COUNT(*) FROM categories) AS categories,
+  COALESCE(SUM(s.quantity), 0) AS total_stock_units,
+  COALESCE(SUM(s.quantity * m.purchase_price), 0) AS inventory_purchase_value
+FROM stock s
+JOIN materials m ON m.id = s.material_id
+WHERE m.is_deleted = 0
+  AND (:godown_id IS NULL OR s.godown_id = :godown_id);
+
+-- Stock movement today (local SQLite date)
+SELECT
+  COALESCE(SUM(CASE WHEN transaction_type = 'STOCK_IN' THEN quantity ELSE 0 END), 0) AS stock_in_qty,
+  COUNT(CASE WHEN transaction_type = 'STOCK_IN' THEN 1 END) AS stock_in_count,
+  COALESCE(SUM(CASE WHEN transaction_type = 'STOCK_OUT' THEN quantity ELSE 0 END), 0) AS stock_out_qty,
+  COUNT(CASE WHEN transaction_type = 'STOCK_OUT' THEN 1 END) AS stock_out_count,
+  -- Each transfer creates an OUT and an IN ledger row. For a company-wide
+  -- total, count only TRANSFER_IN so the same moved quantity is counted once.
+  COALESCE(SUM(CASE
+    WHEN transaction_type = 'TRANSFER_IN'
+      OR (:godown_id IS NOT NULL AND transaction_type = 'TRANSFER_OUT')
+    THEN quantity ELSE 0 END), 0) AS transfer_qty
+FROM stock_transactions
+WHERE DATE(created_at) = DATE('now','localtime')
+  AND (:godown_id IS NULL OR godown_id = :godown_id);
+
+-- Inventory by warehouse (for dashboard chart)
+SELECT g.id, g.name, g.code,
+       COALESCE(SUM(CASE WHEN m.is_deleted = 0 THEN s.quantity ELSE 0 END), 0) AS total_units,
+       COUNT(DISTINCT CASE WHEN m.is_deleted = 0 AND s.quantity &gt; 0 THEN s.material_id END) AS stocked_materials
+FROM godowns g
+LEFT JOIN stock s ON s.godown_id = g.id
+LEFT JOIN materials m ON m.id = s.material_id
+WHERE g.is_active = 1 AND (:godown_id IS NULL OR g.id = :godown_id)
+GROUP BY g.id ORDER BY g.name;
+
+-- Inventory by category (for dashboard chart)
+SELECT c.id, c.name AS category,
+       COALESCE(SUM(s.quantity), 0) AS total_units,
+       COALESCE(SUM(s.quantity * m.purchase_price), 0) AS purchase_value
+FROM categories c
+LEFT JOIN materials m ON m.category_id = c.id AND m.is_deleted = 0
+LEFT JOIN stock s ON s.material_id = m.id AND (:godown_id IS NULL OR s.godown_id = :godown_id)
+GROUP BY c.id ORDER BY total_units DESC;
+
+-- Daily IN/OUT movement over the last 30 days
+SELECT DATE(created_at) AS movement_date,
+       SUM(CASE WHEN transaction_type = 'STOCK_IN' THEN quantity ELSE 0 END) AS stock_in,
+       SUM(CASE WHEN transaction_type = 'STOCK_OUT' THEN quantity ELSE 0 END) AS stock_out,
+       -- Count each company-wide transfer once (its destination/IN row).
+       SUM(CASE
+         WHEN transaction_type = 'TRANSFER_IN'
+           OR (:godown_id IS NOT NULL AND transaction_type = 'TRANSFER_OUT')
+         THEN quantity ELSE 0 END) AS transfer_qty
+FROM stock_transactions
+WHERE created_at &gt;= DATE('now','-30 days')
+  AND (:godown_id IS NULL OR godown_id = :godown_id)
+GROUP BY DATE(created_at) ORDER BY movement_date;
+
+3. GODOWNS / WAREHOUSES
+-----------------------
+-- Active warehouse list
+SELECT id, name, code, location, description, is_active, created_at
+FROM godowns WHERE is_active = 1 ORDER BY name;
+
+-- Warehouse stock overview, with zero balances included
+SELECT g.id AS godown_id, g.name AS godown_name,
+       m.id AS material_id, m.sku, m.name AS material_name, c.name AS category,
+       m.unit, COALESCE(s.quantity, 0) AS quantity, m.min_stock_level,
+       CASE WHEN COALESCE(s.quantity,0) = 0 THEN 'OUT OF STOCK'
+            WHEN COALESCE(s.quantity,0) &lt;= m.min_stock_level THEN 'LOW STOCK'
+            ELSE 'IN STOCK' END AS stock_status
+FROM godowns g
+CROSS JOIN materials m
+JOIN categories c ON c.id = m.category_id
+LEFT JOIN stock s ON s.godown_id = g.id AND s.material_id = m.id
+WHERE g.is_active = 1 AND m.is_deleted = 0
+  AND (:godown_id IS NULL OR g.id = :godown_id)
+ORDER BY g.name, m.name;
+
+4. CATEGORIES
+-------------
+SELECT c.id, c.name, c.description, c.image_url,
+       COUNT(DISTINCT m.id) AS active_material_count,
+       COALESCE(SUM(s.quantity), 0) AS stock_units
+FROM categories c
+LEFT JOIN materials m ON m.category_id = c.id AND m.is_deleted = 0
+LEFT JOIN stock s ON s.material_id = m.id AND (:godown_id IS NULL OR s.godown_id = :godown_id)
+GROUP BY c.id ORDER BY c.name;
+
+5. MATERIAL CATALOG / SKU LIST
+------------------------------
+-- One row per active material; optional warehouse and category filters
+SELECT m.id, m.sku, m.barcode, m.name, c.name AS category,
+       m.brand, m.description, m.size, m.color, m.unit,
+       m.purchase_price, m.selling_price, m.min_stock_level,
+       COALESCE(SUM(s.quantity), 0) AS total_stock,
+       CASE WHEN COALESCE(SUM(s.quantity),0) = 0 THEN 'OUT OF STOCK'
+            WHEN COALESCE(SUM(s.quantity),0) &lt;= m.min_stock_level THEN 'LOW STOCK'
+            ELSE 'IN STOCK' END AS stock_status
+FROM materials m
+JOIN categories c ON c.id = m.category_id
+LEFT JOIN stock s ON s.material_id = m.id AND (:godown_id IS NULL OR s.godown_id = :godown_id)
+WHERE m.is_deleted = 0 AND (:category_id IS NULL OR m.category_id = :category_id)
+GROUP BY m.id ORDER BY m.name;
+
+-- Stock for a material in every active warehouse
+SELECT g.id AS godown_id, g.name AS godown,
+       COALESCE(s.quantity, 0) AS quantity, m.unit,
+       CASE WHEN COALESCE(s.quantity,0) = 0 THEN 'OUT OF STOCK'
+            WHEN COALESCE(s.quantity,0) &lt;= m.min_stock_level THEN 'LOW STOCK'
+            ELSE 'IN STOCK' END AS stock_status
+FROM materials m CROSS JOIN godowns g
+LEFT JOIN stock s ON s.material_id = m.id AND s.godown_id = g.id
+WHERE m.id = :material_id AND m.is_deleted = 0 AND g.is_active = 1
+ORDER BY g.name;
+
+-- Material images
+SELECT id, material_id, image_url, is_primary, created_at
+FROM material_images WHERE material_id = :material_id ORDER BY is_primary DESC, id;
+
+6. CURRENT STOCK / INVENTORY BALANCES
+-------------------------------------
+-- All material balances per warehouse
+-- SQLite CURRENT_TIMESTAMP is stored in UTC; convert it for local display.
+SELECT g.name AS godown, m.sku, m.name AS material, c.name AS category,
+       s.quantity, m.unit, datetime(s.updated_at, 'localtime') AS updated_at
+FROM stock s
+JOIN godowns g ON g.id = s.godown_id
+JOIN materials m ON m.id = s.material_id
+JOIN categories c ON c.id = m.category_id
+WHERE m.is_deleted = 0 AND (:godown_id IS NULL OR g.id = :godown_id)
+ORDER BY g.name, m.name;
+
+-- Total quantity and valuation by material across warehouses
+SELECT m.id, m.sku, m.name, m.unit,
+       COALESCE(SUM(s.quantity),0) AS total_quantity,
+       COALESCE(SUM(s.quantity * m.purchase_price),0) AS purchase_value
+FROM materials m LEFT JOIN stock s ON s.material_id = m.id
+WHERE m.is_deleted = 0 GROUP BY m.id ORDER BY m.name;
+
+7. LOW STOCK / REORDER WATCH
+----------------------------
+-- Per warehouse threshold alerts
+SELECT g.name AS godown, m.id AS material_id, m.sku, m.name AS material,
+       c.name AS category, s.quantity AS current_stock, m.min_stock_level,
+       (m.min_stock_level - s.quantity) AS suggested_reorder_qty, m.unit,
+       m.purchase_price
+FROM stock s
+JOIN godowns g ON g.id = s.godown_id
+JOIN materials m ON m.id = s.material_id
+JOIN categories c ON c.id = m.category_id
+WHERE m.is_deleted = 0 AND s.quantity &lt;= m.min_stock_level
+  AND (:godown_id IS NULL OR s.godown_id = :godown_id)
+ORDER BY (m.min_stock_level - s.quantity) DESC, m.name;
+
+-- Include materials with no stock row in a warehouse
+SELECT g.name AS godown, m.sku, m.name AS material, m.min_stock_level,
+       COALESCE(s.quantity,0) AS current_stock,
+       m.min_stock_level - COALESCE(s.quantity,0) AS suggested_reorder_qty,
+       m.unit
+FROM godowns g CROSS JOIN materials m
+LEFT JOIN stock s ON s.godown_id = g.id AND s.material_id = m.id
+WHERE g.is_active = 1 AND m.is_deleted = 0
+  AND COALESCE(s.quantity,0) &lt;= m.min_stock_level
+  AND (:godown_id IS NULL OR g.id = :godown_id)
+ORDER BY suggested_reorder_qty DESC, m.name;
+
+8. STOCK TRANSACTION HISTORY
+----------------------------
+-- Receipt, dispatch, transfer, adjustment, and opening balance ledger
+SELECT st.transaction_id, st.transaction_type, st.created_at,
+       g.name AS godown, m.sku, m.name AS material, m.unit,
+       st.quantity, st.previous_stock, st.new_stock,
+       st.reference_no, st.partner_name, st.reason, u.name AS recorded_by
+FROM stock_transactions st
+JOIN godowns g ON g.id = st.godown_id
+JOIN materials m ON m.id = st.material_id
+LEFT JOIN users u ON u.id = st.user_id
+WHERE (:godown_id IS NULL OR st.godown_id = :godown_id)
+  AND (:material_id IS NULL OR st.material_id = :material_id)
+  AND (:transaction_type IS NULL OR st.transaction_type = :transaction_type)
+  AND (:start_date IS NULL OR DATE(st.created_at) &gt;= DATE(:start_date))
+  AND (:end_date IS NULL OR DATE(st.created_at) &lt;= DATE(:end_date))
+ORDER BY st.created_at DESC, st.id DESC;
+
+-- Recent 50 movements for one material
+SELECT st.*, g.name AS godown, u.name AS recorded_by
+FROM stock_transactions st
+JOIN godowns g ON g.id = st.godown_id
+LEFT JOIN users u ON u.id = st.user_id
+WHERE st.material_id = :material_id
+ORDER BY st.created_at DESC, st.id DESC LIMIT 50;
+
+9. TRANSFERS
+------------
+SELECT t.transfer_id, t.created_at, fg.name AS from_godown, tg.name AS to_godown,
+       m.sku, m.name AS material, m.unit, t.quantity, t.status, t.reason,
+       u.name AS recorded_by
+FROM stock_transfers t
+JOIN godowns fg ON fg.id = t.from_godown_id
+JOIN godowns tg ON tg.id = t.to_godown_id
+JOIN materials m ON m.id = t.material_id
+LEFT JOIN users u ON u.id = t.user_id
+WHERE (:godown_id IS NULL OR t.from_godown_id = :godown_id OR t.to_godown_id = :godown_id)
+ORDER BY t.created_at DESC, t.id DESC;
+
+10. ADJUSTMENTS / RECONCILIATION
+--------------------------------
+SELECT a.id, a.created_at, g.name AS godown, m.sku, m.name AS material, m.unit,
+       a.system_stock, a.physical_stock, a.adjustment_quantity, a.reason,
+       u.name AS recorded_by
+FROM stock_adjustments a
+JOIN godowns g ON g.id = a.godown_id
+JOIN materials m ON m.id = a.material_id
+LEFT JOIN users u ON u.id = a.user_id
+WHERE (:godown_id IS NULL OR a.godown_id = :godown_id)
+ORDER BY a.created_at DESC, a.id DESC;
+
+11. SUPPLIERS AND CUSTOMERS
+---------------------------
+-- Active suppliers
+SELECT id, name, contact_name, email, phone, address, tax_id, notes, created_at
+FROM suppliers WHERE is_active = 1 ORDER BY name;
+
+-- Active customers
+SELECT id, name, contact_name, email, phone, address, tax_id, notes, created_at
+FROM customers WHERE is_active = 1 ORDER BY name;
+
+12. PURCHASE / SALES ORDERS
+---------------------------
+-- Orders with party, warehouse, creator and line count
+SELECT o.id, o.order_no, o.order_type, o.status, o.created_at, o.updated_at,
+       g.name AS godown, u.name AS created_by,
+       CASE WHEN o.order_type = 'PURCHASE' THEN s.name ELSE c.name END AS party_name,
+       COUNT(l.id) AS line_count,
+       COALESCE(SUM(l.quantity * l.unit_price),0) AS order_total,
+       o.notes
+FROM inventory_orders o
+JOIN godowns g ON g.id = o.godown_id
+LEFT JOIN users u ON u.id = o.created_by
+LEFT JOIN suppliers s ON o.order_type = 'PURCHASE' AND s.id = o.party_id
+LEFT JOIN customers c ON o.order_type = 'SALES' AND c.id = o.party_id
+LEFT JOIN inventory_order_lines l ON l.order_id = o.id
+WHERE (:order_type IS NULL OR o.order_type = :order_type)
+  AND (:status IS NULL OR o.status = :status)
+  AND (:godown_id IS NULL OR o.godown_id = :godown_id)
+GROUP BY o.id ORDER BY o.created_at DESC, o.id DESC;
+
+-- Order lines and material details for a selected order
+SELECT l.id AS line_id, o.order_no, o.order_type, o.status,
+       m.sku, m.name AS material, m.unit, l.quantity, l.unit_price,
+       l.quantity * l.unit_price AS line_total,
+       l.lot_code, l.shade_code, l.caliber, l.expiry_date
+FROM inventory_orders o
+JOIN inventory_order_lines l ON l.order_id = o.id
+JOIN materials m ON m.id = l.material_id
+WHERE o.id = :order_id ORDER BY l.id;
+
+13. STOCK LOTS / BATCH TRACEABILITY
+-----------------------------------
+SELECT l.id, l.lot_code, l.shade_code, l.caliber, l.expiry_date,
+       l.quantity, l.created_at, m.sku, m.name AS material, m.unit,
+       g.name AS godown
+FROM stock_lots l
+JOIN materials m ON m.id = l.material_id
+JOIN godowns g ON g.id = l.godown_id
+WHERE l.quantity &gt; 0 AND (:godown_id IS NULL OR l.godown_id = :godown_id)
+  AND (:material_id IS NULL OR l.material_id = :material_id)
+ORDER BY l.expiry_date IS NULL, l.expiry_date, l.created_at;
+
+-- Lots that are expired or expiring in the next 30 days
+SELECT l.lot_code, l.expiry_date, l.quantity, m.sku, m.name AS material,
+       g.name AS godown
+FROM stock_lots l
+JOIN materials m ON m.id = l.material_id
+JOIN godowns g ON g.id = l.godown_id
+WHERE l.quantity &gt; 0 AND l.expiry_date IS NOT NULL
+  AND DATE(l.expiry_date) &lt;= DATE('now','+30 days')
+ORDER BY DATE(l.expiry_date);
+
+14. CYCLE COUNTS
+----------------
+-- Count session list
+SELECT cs.id, cs.session_no, cs.status, cs.created_at, cs.reviewed_at,
+       g.name AS godown, creator.name AS created_by, reviewer.name AS reviewed_by
+FROM count_sessions cs
+JOIN godowns g ON g.id = cs.godown_id
+LEFT JOIN users creator ON creator.id = cs.created_by
+LEFT JOIN users reviewer ON reviewer.id = cs.reviewed_by
+WHERE (:godown_id IS NULL OR cs.godown_id = :godown_id)
+ORDER BY cs.created_at DESC;
+
+-- Count lines, expected vs counted quantities, and variance
+SELECT cs.session_no, cs.status, g.name AS godown,
+       m.sku, m.name AS material, m.unit, l.lot_code,
+       l.expected_quantity, l.counted_quantity,
+       CASE WHEN l.counted_quantity IS NULL THEN NULL
+            ELSE l.counted_quantity - l.expected_quantity END AS variance
+FROM count_session_lines l
+JOIN count_sessions cs ON cs.id = l.session_id
+JOIN godowns g ON g.id = cs.godown_id
+JOIN materials m ON m.id = l.material_id
+WHERE cs.id = :session_id ORDER BY m.name, l.lot_code;
+
+15. USERS / ROLE AND ACCESS DISPLAY
+----------------------------------
+-- User management list (intentionally excludes password_hash)
+SELECT u.id, u.name, u.username, u.email, u.mobile, u.role,
+       g.name AS assigned_godown, u.can_stock_in, u.can_stock_out,
+       u.can_adjust, u.is_active, u.created_at, u.updated_at
+FROM users u
+LEFT JOIN godowns g ON g.id = u.assigned_godown_id
+ORDER BY u.name;
+
+-- Activity totals per user
+SELECT u.id, u.name, u.username, u.role, u.is_active,
+       COUNT(DISTINCT st.id) AS stock_transactions,
+       COUNT(DISTINCT t.id) AS transfers,
+       COUNT(DISTINCT a.id) AS adjustments,
+       COUNT(DISTINCT al.id) AS audit_actions,
+       MAX(al.created_at) AS last_audit_activity
+FROM users u
+LEFT JOIN stock_transactions st ON st.user_id = u.id
+LEFT JOIN stock_transfers t ON t.user_id = u.id
+LEFT JOIN stock_adjustments a ON a.user_id = u.id
+LEFT JOIN audit_logs al ON al.user_id = u.id
+GROUP BY u.id ORDER BY stock_transactions DESC, u.name;
+
+16. AUDIT LOGS
+--------------
+SELECT al.id, al.created_at, al.user_name, al.role, al.action, al.details,
+       al.ip_address, al.affected_table, al.affected_id
+FROM audit_logs al
+WHERE (:start_date IS NULL OR DATE(al.created_at) &gt;= DATE(:start_date))
+  AND (:end_date IS NULL OR DATE(al.created_at) &lt;= DATE(:end_date))
+  AND (:action IS NULL OR al.action = :action)
+ORDER BY al.created_at DESC, al.id DESC;
+
+17. REPORTS
+-----------
+-- Stock valuation by godown and material
+SELECT g.name AS godown, m.sku, m.name AS material, c.name AS category,
+       COALESCE(s.quantity,0) AS quantity, m.unit, m.purchase_price,
+       COALESCE(s.quantity,0) * m.purchase_price AS inventory_value
+FROM godowns g CROSS JOIN materials m
+JOIN categories c ON c.id = m.category_id
+LEFT JOIN stock s ON s.godown_id = g.id AND s.material_id = m.id
+WHERE g.is_active = 1 AND m.is_deleted = 0
+  AND (:godown_id IS NULL OR g.id = :godown_id)
+ORDER BY g.name, m.name;
+
+-- Category totals and valuation
+SELECT c.name AS category, COUNT(DISTINCT m.id) AS material_count,
+       COALESCE(SUM(s.quantity),0) AS total_quantity,
+       COALESCE(SUM(s.quantity * m.purchase_price),0) AS purchase_value
+FROM categories c
+LEFT JOIN materials m ON m.category_id = c.id AND m.is_deleted = 0
+LEFT JOIN stock s ON s.material_id = m.id
+GROUP BY c.id ORDER BY total_quantity DESC;
+
+-- Material movement within a date range
+SELECT m.sku, m.name AS material, m.unit, c.name AS category,
+       SUM(CASE WHEN st.transaction_type = 'STOCK_IN' THEN st.quantity ELSE 0 END) AS total_in,
+       SUM(CASE WHEN st.transaction_type = 'STOCK_OUT' THEN st.quantity ELSE 0 END) AS total_out,
+       SUM(CASE WHEN st.transaction_type = 'TRANSFER_IN' THEN st.quantity ELSE 0 END) AS transfer_in,
+       SUM(CASE WHEN st.transaction_type = 'TRANSFER_OUT' THEN st.quantity ELSE 0 END) AS transfer_out,
+       SUM(CASE WHEN st.transaction_type = 'ADJUSTMENT' THEN st.quantity ELSE 0 END) AS adjustment_quantity,
+       (SELECT COALESCE(SUM(quantity),0) FROM stock WHERE material_id = m.id) AS current_stock
+FROM materials m
+JOIN categories c ON c.id = m.category_id
+LEFT JOIN stock_transactions st ON st.material_id = m.id
+  AND (:start_date IS NULL OR DATE(st.created_at) &gt;= DATE(:start_date))
+  AND (:end_date IS NULL OR DATE(st.created_at) &lt;= DATE(:end_date))
+WHERE m.is_deleted = 0
+GROUP BY m.id ORDER BY (total_in + total_out) DESC;
+
+18. SETTINGS AND MIGRATION STATUS
+---------------------------------
+SELECT key, value, description, updated_at
+FROM system_settings ORDER BY key;
+
+SELECT version, name, applied_at FROM schema_migrations ORDER BY version;
+
+Notes
+-----
+- Quantities are in the material's unit. Inventory value here uses purchase_price.
+- Some screens use API-level filtering, sorting, pagination, and role scoping;
+  add LIMIT/OFFSET or filters when inspecting large databases manually.
+- These are SELECT/PRAGMA queries for viewing and checking data. Backup,
+  restore, and data entry should use the application's documented workflows.
+</sql><current_tab id="0"/></tab_sql></sqlb_project>
