@@ -73,7 +73,7 @@ export function Dashboard({ onOpenTransactionModal, onSelectMaterial, onSelectPa
   const categoryData = data?.categoryDistribution?.map((c) => ({
     name: c.name,
     value: c.total_stock
-  })) || [];
+  })).filter((category) => Number(category.value) > 0) || [];
 
   const trendData = data?.movementTrends || [];
   const movementByDate = new Map(trendData.map((movement) => [movement.date, movement]));
@@ -89,6 +89,14 @@ export function Dashboard({ onOpenTransactionModal, onSelectMaterial, onSelectPa
       transfers: 0,
       ...movementByDate.get(date)
     };
+  });
+  const trendDateTicks = trendChartData
+    .filter((_, index) => index === 0 || index === trendChartData.length - 1 || index % 6 === 0)
+    .map((day) => day.date);
+  const formatMovementDate = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC'
   });
 
   return (
@@ -246,30 +254,46 @@ export function Dashboard({ onOpenTransactionModal, onSelectMaterial, onSelectPa
           <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '16px' }}>
             Category-wise Stock Breakdown
           </h3>
-          <div style={{ width: '100%', height: '260px', display: 'flex', alignItems: 'center' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={categoryData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={95}
-                  paddingAngle={5}
-                  dataKey="value"
-                  nameKey="name"
-                  label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
-                >
-                  {categoryData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)', borderRadius: '8px' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+          {categoryData.length > 0 ? (
+            <div className="category-breakdown-layout">
+              <div className="category-breakdown-chart">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={categoryData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={58}
+                      outerRadius={96}
+                      paddingAngle={3}
+                      dataKey="value"
+                      nameKey="name"
+                      label={false}
+                      labelLine={false}
+                    >
+                      {categoryData.map((entry, index) => (
+                        <Cell key={entry.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value) => [`${Number(value).toLocaleString()} units`, 'Available stock']}
+                      contentStyle={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)', borderRadius: '8px' }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <ul className="category-breakdown-legend" aria-label="Categories with available stock">
+                {categoryData.map((category, index) => (
+                  <li key={category.name}>
+                    <span aria-hidden="true" style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }} />
+                    <span>{category.name}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <div className="category-breakdown-empty">No materials currently have available stock.</div>
+          )}
         </div>
       </div>
 
@@ -278,22 +302,42 @@ export function Dashboard({ onOpenTransactionModal, onSelectMaterial, onSelectPa
         <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '16px' }}>
           Stock Movement — Last 30 Days
         </h3>
+        <p className="movement-chart-help">
+          Daily quantities received, sent out, and transferred between godowns. Flat sections mean no movement was recorded.
+        </p>
         {trendData.length === 0 ? (
           <div style={{ height: 240, display: 'grid', placeItems: 'center', color: 'var(--text-dim)' }}>
             No stock movement recorded in the last 30 days.
           </div>
         ) : (
-          <div style={{ width: '100%', height: '260px' }}>
+          <div style={{ width: '100%', height: '280px' }}>
             <ResponsiveContainer>
-              <LineChart data={trendChartData}>
+              <LineChart data={trendChartData} margin={{ top: 8, right: 12, bottom: 0, left: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="date" stroke="var(--text-dim)" fontSize={12} tickFormatter={(date) => date.slice(5)} />
-                <YAxis stroke="var(--text-dim)" fontSize={12} />
-                <Tooltip contentStyle={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)', borderRadius: '8px' }} />
+                <XAxis
+                  dataKey="date"
+                  ticks={trendDateTicks}
+                  interval={0}
+                  minTickGap={18}
+                  stroke="var(--text-dim)"
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={formatMovementDate}
+                />
+                <YAxis
+                  stroke="var(--text-dim)"
+                  fontSize={11}
+                  width={48}
+                  label={{ value: 'Units', angle: -90, position: 'insideLeft', fill: 'var(--text-dim)', fontSize: 11 }}
+                />
+                <Tooltip
+                  labelFormatter={formatMovementDate}
+                  formatter={(value, name) => [`${Number(value).toLocaleString()} units`, name]}
+                  contentStyle={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)', borderRadius: '8px' }}
+                />
                 <Legend />
-                <Line type="monotone" dataKey="stock_in" name="Stock In" stroke="#10b981" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="stock_out" name="Stock Out" stroke="#f43f5e" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                <Line type="monotone" dataKey="transfers" name="Transfers" stroke="#06b6d4" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="stock_in" name="Received" stroke="#10b981" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
+                <Line type="monotone" dataKey="stock_out" name="Sent out" stroke="#f43f5e" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
+                <Line type="monotone" dataKey="transfers" name="Transferred" stroke="#06b6d4" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>

@@ -1,0 +1,103 @@
+{
+  "input": "C:\\Users\\Parth\\Downloads\\Literature_Review_Paper_IEEE_5pages (1).docx",
+  "fonts_by_char_count": {},
+  "direct_run_formatting_runs": 91,
+  "direct_paragraph_formatting_paragraphs": 60,
+  "heading_like_paragraphs_not_heading_style": [
+    {
+      "para_index": 66,
+      "text": "Author, Year",
+      "style": "Normal"
+    },
+    {
+      "para_index": 67,
+      "text": "Method / Technology",
+      "style": "Normal"
+    },
+    {
+      "para_index": 68,
+      "text": "Advantage",
+      "style": "Normal"
+    },
+    {
+      "para_index": 69,
+      "text": "Limitation",
+      "style": "Normal"
+    },
+    {
+      "para_index": 110,
+      "text": "Test case",
+      "style": "Normal"
+    },
+    {
+      "para_index": 111,
+      "text": "Observed outcome",
+      "style": "Normal"
+    },
+    {
+      "para_index": 112,
+      "text": "Status",
+      "style": "Normal"
+    }
+  ],
+  "examples": {
+    "direct_paragraph_formatting": [
+      {
+        "para_index": 1,
+        "text": "Web-Based Material Management Systems: A Literature Review and a Proposed Implementation",
+        "style": "Normal"
+      },
+      {
+        "para_index": 2,
+        "text": "Student Names",
+        "style": "Normal"
+      },
+      {
+        "para_index": 3,
+        "text": "Parth Morabale, Ayush Patel, Samarth Patil, Suyash Shalbidre",
+        "style": "Normal"
+      },
+      {
+        "para_index": 4,
+        "text": "Guide Name",
+        "style": "Normal"
+      },
+      {
+        "para_index": 5,
+        "text": "Ms.S.S.Dongare",
+        "style": "Normal"
+      }
+    ],
+    "direct_run_formatting": [
+      {
+        "para_index": 1,
+        "run_text": "Web-Based Material Management Systems: A Literature Review and a Proposed Implem",
+        "style": "Normal"
+      },
+      {
+        "para_index": 6,
+        "run_text": "Department of Computer Science & Engineering",
+        "style": "Normal"
+      },
+      {
+        "para_index": 7,
+        "run_text": "Sanjay Ghodawat Instit",
+        "style": "Normal"
+      },
+      {
+        "para_index": 7,
+        "run_text": "ute",
+        "style": "Normal"
+      },
+      {
+        "para_index": 7,
+        "run_text": ",",
+        "style": "Normal"
+      }
+    ]
+  },
+  "notes": [
+    "Direct formatting is not always wrong, but it often causes inconsistent output when templates change.",
+    "Heading-like paragraphs not using Heading styles can break TOC and accessibility."
+  ]
+}

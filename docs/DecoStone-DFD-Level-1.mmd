@@ -1,0 +1,42 @@
+flowchart LR
+    U["System users<br/>Admin · Manager · Supervisor"]
+
+    P1(("1.0<br/>Authenticate user<br/>Check role and godown access"))
+    P2(("2.0<br/>Manage master data<br/>Godowns · Categories · Materials"))
+    P3(("3.0<br/>Process stock activity<br/>Receive · Dispatch · Transfer · Adjust"))
+    P4(("4.0<br/>View inventory and reports<br/>Balances · Alerts · History · Exports"))
+
+    D1[("D1 User accounts<br/>Roles and assignments")]
+    D2[("D2 Master records<br/>Godowns · Categories · Materials")]
+    D3[("D3 Stock balances<br/>Material quantities by godown")]
+    D4[("D4 Transaction records<br/>Stock in · Stock out · Transfers · Adjustments")]
+    D5[("D5 Audit log<br/>User and operation events")]
+
+    U -->|Credentials| P1
+    P1 -->|Access result| U
+    P1 <-->|Verify account and permissions| D1
+
+    U -->|Admin master-data requests| P2
+    P2 -->|Save or retrieve master records| D2
+    D2 -->|Material and godown details| P2
+    P2 -->|Confirmation or validation errors| U
+
+    U -->|Authorized stock operation| P3
+    D2 -->|Validate material and godown| P3
+    P3 <-->|Check and update quantity| D3
+    P3 -->|Write transaction details| D4
+    P3 -->|Record operation event| D5
+    P3 -->|Operation result| U
+
+    U -->|Inventory or report request| P4
+    D2 -->|Material and category details| P4
+    D3 -->|Current stock balances| P4
+    D4 -->|Movement history| P4
+    P4 -->|Balances, low-stock alerts, history and reports| U
+
+    classDef entity fill:#edf3fa,stroke:#425d7a,stroke-width:2px,color:#182338;
+    classDef process fill:#fff2dc,stroke:#a7600b,stroke-width:2px,color:#182338;
+    classDef store fill:#eef7f2,stroke:#32704e,stroke-width:2px,color:#182338;
+    class U entity;
+    class P1,P2,P3,P4 process;
+    class D1,D2,D3,D4,D5 store;
